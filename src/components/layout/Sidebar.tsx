@@ -50,14 +50,26 @@ const PRIMARY_NAV: NavItem[] = [
   { type: 'link', href: '/work-packages',label: 'Work Package', icon: ClipboardList   },
   { type: 'link', href: '/productivity', label: 'Productivity', icon: TrendingUp      },
   { type: 'link', href: '/labour-cost',  label: 'Labour Cost',  icon: Banknote        },
-  { type: 'link', href: '/reports',      label: 'Reports',      icon: FileText        },
+  {
+    type: 'group',
+    id: 'reports',
+    label: 'Reports',
+    icon: FileText,
+    children: [
+      { href: '/reports/weekly',        label: 'Weekly Workforce'  },
+      { href: '/reports/attendance',    label: 'Attendance'        },
+      { href: '/reports/labour-cost',   label: 'Labour Cost'       },
+      { href: '/reports/productivity',  label: 'Productivity'      },
+      { href: '/reports/work-packages', label: 'Work Package'      },
+    ],
+  },
   {
     type: 'group',
     id: 'employees',
     label: 'Employees',
     icon: Users,
     children: [
-      { href: '/employees',              label: 'Employee List' },
+      { href: '/employees/list',         label: 'Employee List' },
       { href: '/employees/registration', label: 'Registration'  },
       { href: '/employees/resignation',  label: 'Resignation'   },
       { href: '/employees/transfer',     label: 'Transfer'      },
