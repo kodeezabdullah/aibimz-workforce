@@ -224,7 +224,7 @@ function makeAttendance(): AttendanceRecord[] {
     const dow          = dateObj.getDay()
     const daysFromStart = DAYS_OF_DATA - 1 - d
 
-    const isWeekend = dow === 0 || dow === 6
+    const isWeekend = dow === 0  // only Sunday is non-working; Saturday is a full working day
 
     const { period_type, period_status } = periodOf(dateObj)
 
@@ -433,7 +433,7 @@ function getLatestWorkday(): string {
   for (let offset = 0; offset < 7; offset++) {
     const d = new Date(REF_DATE)
     d.setDate(REF_DATE.getDate() - offset)
-    if (d.getDay() !== 0 && d.getDay() !== 6) return isoDate(d)
+    if (d.getDay() !== 0) return isoDate(d)  // only skip Sundays
   }
   return TODAY_STR
 }
@@ -749,4 +749,315 @@ export function getDailyWorkerRecords(_projectId: string, date?: string): DailyW
     })
     .filter((r): r is DailyWorkerRecord => r !== null)
     .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// ---------------------------------------------------------------------------
+// Helpers shared by attendance-module selectors
+// ---------------------------------------------------------------------------
+const MONTH_NAMES_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const DAY_NAMES_FULL    = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
+
+export const HOURLY_RATES: Record<WorkerType, number> = {
+  general_worker: 10,
+  staff:          35,
+  subcon:         18,
+  operator:       22,
+  subcon_as_gw:   12,
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate()
+}
+
+function formatDateRangeLabel(startDay: number, endDay: number, month: number, year: number): string {
+  const m = MONTH_NAMES_SHORT[month - 1]
+  return `${String(startDay).padStart(2, '0')} ${m} – ${String(endDay).padStart(2, '0')} ${m} ${year}`
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Attendance periods (Tab A — Search/Amend)
+// ---------------------------------------------------------------------------
+export interface AttendancePeriod {
+  id: string                 // "workerType__year__month__periodType"
+  workerType: WorkerType
+  workerTypeLabel: string
+  periodType: PeriodType
+  year: number
+  month: number
+  dateRangeStart: string     // "YYYY-MM-DD"
+  dateRangeEnd: string       // "YYYY-MM-DD"
+  dateRangeLabel: string     // "01 Aug – 15 Aug 2025"
+  expiredDate: string        // "22 Aug 2025"
+  status: PeriodStatus
+  workerCount: number
+}
+
+export function getAttendancePeriods(
+  _projectId: string,
+  filters?: { workerType?: WorkerType | 'all'; status?: PeriodStatus | 'all'; month?: string }
+): AttendancePeriod[] {
+  const workerTypeMap = new Map(MOCK_WORKERS.map(w => [w.id, w.worker_type]))
+
+  const groups = new Map<string, { status: PeriodStatus; workers: Set<string> }>()
+
+  for (const rec of MOCK_ATTENDANCE) {
+    const workerType = workerTypeMap.get(rec.worker_id)
+    if (!workerType) continue
+    const d = new Date(rec.date + 'T00:00:00')
+    const year  = d.getFullYear()
+    const month = d.getMonth() + 1
+    const key   = `${workerType}__${year}__${month}__${rec.period_type}`
+
+    if (!groups.has(key)) groups.set(key, { status: 'finalized', workers: new Set() })
+    const g = groups.get(key)!
+    g.workers.add(rec.worker_id)
+    if (rec.period_status === 'processing') g.status = 'processing'
+  }
+
+  const periods: AttendancePeriod[] = []
+  for (const [key, g] of groups.entries()) {
+    const parts      = key.split('__')
+    const workerType = parts[0] as WorkerType
+    const year       = parseInt(parts[1])
+    const month      = parseInt(parts[2])
+    const periodType = parts[3] as PeriodType
+
+    const lastDay = daysInMonth(year, month)
+    let startDay: number, endDay: number
+    if (periodType === '1st_half')  { startDay = 1;  endDay = 15 }
+    else if (periodType === '2nd_half') { startDay = 16; endDay = lastDay }
+    else                            { startDay = 1;  endDay = lastDay }
+
+    const mm = String(month).padStart(2, '0')
+    const expiry = new Date(`${year}-${mm}-${String(endDay).padStart(2, '0')}T00:00:00`)
+    expiry.setDate(expiry.getDate() + 7)
+    const expiredDate = `${String(expiry.getDate()).padStart(2,'0')} ${MONTH_NAMES_SHORT[expiry.getMonth()]} ${expiry.getFullYear()}`
+
+    periods.push({
+      id: key,
+      workerType,
+      workerTypeLabel: WORKER_TYPE_LABELS[workerType],
+      periodType,
+      year, month,
+      dateRangeStart: `${year}-${mm}-${String(startDay).padStart(2, '0')}`,
+      dateRangeEnd:   `${year}-${mm}-${String(endDay).padStart(2, '0')}`,
+      dateRangeLabel: formatDateRangeLabel(startDay, endDay, month, year),
+      expiredDate,
+      status: g.status,
+      workerCount: g.workers.size,
+    })
+  }
+
+  let result = periods
+  if (filters?.workerType && filters.workerType !== 'all') {
+    result = result.filter(p => p.workerType === filters.workerType)
+  }
+  if (filters?.status && filters.status !== 'all') {
+    result = result.filter(p => p.status === filters.status)
+  }
+  if (filters?.month) {
+    const [fy, fm] = filters.month.split('-').map(Number)
+    result = result.filter(p => p.year === fy && p.month === fm)
+  }
+
+  const ptOrder: Record<PeriodType, number> = { '1st_half': 0, '2nd_half': 1, 'monthly': 0 }
+  result.sort((a, b) => {
+    if (b.year  !== a.year)  return b.year  - a.year
+    if (b.month !== a.month) return b.month - a.month
+    return ptOrder[a.periodType] - ptOrder[b.periodType]
+  })
+
+  return result
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Personal daily attendance (Tab B — Personal Dashboard)
+// ---------------------------------------------------------------------------
+export interface PersonalDailyRecord {
+  date: string
+  dayName: string                          // "Monday"
+  dayOfMonth: number
+  isSunday: boolean
+  checkIn: string | null
+  checkOut: string | null
+  workingHours: number | null
+  lateIn: string | null                    // e.g. "30 min"
+  otEligible: number
+  status: AttendanceStatus | 'non_working'
+  periodStatus: PeriodStatus | null
+}
+
+export function getPersonalAttendance(
+  workerId: string,
+  month: number,
+  year: number,
+): PersonalDailyRecord[] {
+  const count  = daysInMonth(year, month)
+  const mm     = String(month).padStart(2, '0')
+  const prefix = `${year}-${mm}`
+
+  const workerRecs = MOCK_ATTENDANCE.filter(r => r.worker_id === workerId && r.date.startsWith(prefix))
+  const byDate     = new Map(workerRecs.map(r => [r.date, r]))
+
+  const result: PersonalDailyRecord[] = []
+  for (let day = 1; day <= count; day++) {
+    const dateStr = `${prefix}-${String(day).padStart(2, '0')}`
+    const d       = new Date(dateStr + 'T00:00:00')
+    const dow     = d.getDay()
+    const isSunday = dow === 0
+
+    if (isSunday) {
+      result.push({
+        date: dateStr, dayName: 'Sunday', dayOfMonth: day,
+        isSunday: true, checkIn: null, checkOut: null,
+        workingHours: null, lateIn: null, otEligible: 0,
+        status: 'non_working', periodStatus: null,
+      })
+      continue
+    }
+
+    const rec = byDate.get(dateStr)
+    if (!rec) {
+      result.push({
+        date: dateStr, dayName: DAY_NAMES_FULL[dow], dayOfMonth: day,
+        isSunday: false, checkIn: null, checkOut: null,
+        workingHours: null, lateIn: null, otEligible: 0,
+        status: 'absent', periodStatus: null,
+      })
+      continue
+    }
+
+    let lateIn: string | null = null
+    if (rec.status === 'late' && rec.check_in) {
+      const [h, m] = rec.check_in.split(':').map(Number)
+      const minsLate = Math.max(0, (h * 60 + m) - (7 * 60 + 30))
+      if (minsLate > 0) lateIn = `${minsLate} min`
+    }
+
+    result.push({
+      date: dateStr, dayName: DAY_NAMES_FULL[dow], dayOfMonth: day,
+      isSunday: false, checkIn: rec.check_in, checkOut: rec.check_out,
+      workingHours: rec.working_hours, lateIn,
+      otEligible: rec.overtime_hours,
+      status: rec.status, periodStatus: rec.period_status,
+    })
+  }
+  return result
+}
+
+export function countWorkingDaysInMonth(month: number, year: number): number {
+  const count = daysInMonth(year, month)
+  let working = 0
+  for (let day = 1; day <= count; day++) {
+    if (new Date(year, month - 1, day).getDay() !== 0) working++
+  }
+  return working
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Attendance summary (detail view)
+// ---------------------------------------------------------------------------
+export interface AttendanceSummaryData {
+  periodId: string
+  workerType: WorkerType
+  workerTypeLabel: string
+  periodType: PeriodType
+  dateRangeLabel: string
+  status: PeriodStatus
+  source: AttendanceSource
+  totalHeadcount: number
+  totalHeadcountPrev: number
+  totalPayment: number
+  totalPaymentPrev: number
+  totalBackcharge: number
+  totalBackchargePrev: number
+  employeesYetToSubmit: number
+}
+
+export function getAttendanceSummary(
+  periodId: string,
+  source: AttendanceSource,
+): AttendanceSummaryData | null {
+  const parts = periodId.split('__')
+  if (parts.length < 4) return null
+
+  const workerType = parts[0] as WorkerType
+  const year       = parseInt(parts[1])
+  const month      = parseInt(parts[2])
+  const periodType = parts[3] as PeriodType
+
+  const lastDay = daysInMonth(year, month)
+  let startDay: number, endDay: number
+  if (periodType === '1st_half')      { startDay = 1;  endDay = 15 }
+  else if (periodType === '2nd_half') { startDay = 16; endDay = lastDay }
+  else                                { startDay = 1;  endDay = lastDay }
+
+  const mm        = String(month).padStart(2, '0')
+  const dateStart = `${year}-${mm}-${String(startDay).padStart(2, '0')}`
+  const dateEnd   = `${year}-${mm}-${String(endDay).padStart(2, '0')}`
+
+  const typeWorkers    = MOCK_WORKERS.filter(w => w.worker_type === workerType)
+  const typeWorkerIds  = new Set(typeWorkers.map(w => w.id))
+  const rate           = HOURLY_RATES[workerType]
+  const bcRate         = workerType === 'subcon' ? 0.12 : workerType === 'subcon_as_gw' ? 0.10 : 0.05
+
+  function calcKPIs(recs: AttendanceRecord[]) {
+    const headcount  = new Set(recs.map(r => r.worker_id)).size
+    const totalHours = recs
+      .filter(r => r.status !== 'absent' && r.working_hours !== null)
+      .reduce((s, r) => s + (r.working_hours ?? 0), 0)
+    const payment    = Math.round(totalHours * rate)
+    const backcharge = Math.round(payment * bcRate)
+    return { headcount, payment, backcharge }
+  }
+
+  const currRecs = MOCK_ATTENDANCE.filter(r =>
+    typeWorkerIds.has(r.worker_id) && r.date >= dateStart && r.date <= dateEnd && r.source === source
+  )
+  const curr = calcKPIs(currRecs)
+
+  // Previous period
+  let prevYear = year, prevMonth = month, prevPT: PeriodType
+  if (periodType === '2nd_half') {
+    prevPT = '1st_half'
+  } else {
+    prevMonth = month === 1 ? 12 : month - 1
+    prevYear  = month === 1 ? year - 1 : year
+    prevPT    = periodType === 'monthly' ? 'monthly' : '2nd_half'
+  }
+  const prevLastDay = daysInMonth(prevYear, prevMonth)
+  let prevStart: number, prevEnd: number
+  if (prevPT === '1st_half')      { prevStart = 1;  prevEnd = 15 }
+  else if (prevPT === '2nd_half') { prevStart = 16; prevEnd = prevLastDay }
+  else                            { prevStart = 1;  prevEnd = prevLastDay }
+
+  const pmm          = String(prevMonth).padStart(2, '0')
+  const prevDateStart = `${prevYear}-${pmm}-${String(prevStart).padStart(2, '0')}`
+  const prevDateEnd   = `${prevYear}-${pmm}-${String(prevEnd).padStart(2, '0')}`
+
+  const prevRecs = MOCK_ATTENDANCE.filter(r =>
+    typeWorkerIds.has(r.worker_id) && r.date >= prevDateStart && r.date <= prevDateEnd && r.source === source
+  )
+  const prev = calcKPIs(prevRecs)
+
+  const status: PeriodStatus = currRecs.some(r => r.period_status === 'processing')
+    ? 'processing' : 'finalized'
+
+  const workerIdsWithRecs      = new Set(currRecs.map(r => r.worker_id))
+  const employeesYetToSubmit   = typeWorkers.filter(w => !workerIdsWithRecs.has(w.id)).length
+
+  return {
+    periodId, workerType,
+    workerTypeLabel: WORKER_TYPE_LABELS[workerType],
+    periodType,
+    dateRangeLabel: formatDateRangeLabel(startDay, endDay, month, year),
+    status, source,
+    totalHeadcount:      curr.headcount,
+    totalHeadcountPrev:  prev.headcount,
+    totalPayment:        curr.payment,
+    totalPaymentPrev:    prev.payment,
+    totalBackcharge:     curr.backcharge,
+    totalBackchargePrev: prev.backcharge,
+    employeesYetToSubmit,
+  }
 }

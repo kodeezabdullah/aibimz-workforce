@@ -10,6 +10,14 @@ interface StatCardProps {
   /** When trend up is good (default true). Flips color for metrics where up = bad (e.g. absenteeism). */
   deltaGoodDirection?: 'up' | 'down'
   className?: string
+  /** Optional icon placed in a small colored box at the top of the card */
+  icon?: React.ReactNode
+  /** CSS color value for the icon box background (e.g. 'rgba(184,134,46,0.15)') */
+  iconBg?: string
+  /** CSS color value for the icon itself */
+  iconColor?: string
+  /** Sub-line below delta: e.g. "From 127 last period" */
+  fromPrevLabel?: string
 }
 
 export function StatCard({
@@ -19,9 +27,13 @@ export function StatCard({
   delta,
   deltaGoodDirection = 'up',
   className,
+  icon,
+  iconBg,
+  iconColor,
+  fromPrevLabel,
 }: StatCardProps) {
   const showDelta = delta !== undefined && delta !== 0
-  const isUp = delta !== undefined && delta > 0
+  const isUp   = delta !== undefined && delta > 0
   const isGood = showDelta
     ? deltaGoodDirection === 'up' ? isUp : !isUp
     : null
@@ -36,6 +48,16 @@ export function StatCard({
         className,
       )}
     >
+      {/* Icon box (optional) */}
+      {icon && (
+        <div
+          className="w-9 h-9 rounded-[6px] flex items-center justify-center shrink-0"
+          style={{ background: iconBg ?? 'var(--color-border)', color: iconColor ?? 'var(--color-ink-muted)' }}
+        >
+          {icon}
+        </div>
+      )}
+
       <span className="text-xs font-medium text-[var(--color-ink-muted)] uppercase tracking-wider leading-none">
         {label}
       </span>
@@ -60,6 +82,10 @@ export function StatCard({
 
       {sublabel && (
         <span className="text-xs text-[var(--color-ink-muted)] leading-snug">{sublabel}</span>
+      )}
+
+      {fromPrevLabel && (
+        <span className="text-[11px] text-[var(--color-ink-muted)] leading-snug">{fromPrevLabel}</span>
       )}
     </div>
   )
