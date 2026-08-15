@@ -503,6 +503,17 @@ export const MOCK_WORK_PACKAGES: WorkPackage[] = [
 ]
 
 // ---------------------------------------------------------------------------
+// Labour rates — hourly + OT (1.5× normal) per worker type
+// ---------------------------------------------------------------------------
+export const OT_RATES: Record<WorkerType, number> = {
+  general_worker: 15.00,   // 1.5× RM10
+  staff:          52.50,   // 1.5× RM35
+  subcon:         27.00,   // 1.5× RM18
+  operator:       33.00,   // 1.5× RM22
+  subcon_as_gw:   18.00,   // 1.5× RM12
+}
+
+// ---------------------------------------------------------------------------
 // Selector: Work packages
 // ---------------------------------------------------------------------------
 export function getWorkPackages(_projectId: string): WorkPackage[] {
@@ -1299,6 +1310,234 @@ const WP_TRADE_MAP: Partial<Record<string, string[]>> = {
   'Plumbing':                    ['Plumbing'],
   'Earthworks':                  ['Excavation', 'Civil Works'],
   'Protection':                  ['Civil Works', 'Structural'],
+}
+
+// ---------------------------------------------------------------------------
+// Labour cost selectors
+// ---------------------------------------------------------------------------
+
+// Rolling 30-day window ending today — used as "monthly" cost baseline.
+const MONTHLY_COST_START = isoDate(new Date(REF_DATE.getTime() - 30 * 86_400_000))
+
+// ---------------------------------------------------------------------------
+// Selector: Work Package Budget Reconciliation
+// ---------------------------------------------------------------------------
+// TRADE-CATEGORY MATCHING STAND-IN:
+// We have no worker↔work-package assignment table in the schema yet.
+// Instead we cross-reference WP subcategory → WP_TRADE_MAP → matching workers
+// → their hours × rate, then attribute each worker's cost proportionally
+// across all WPs they match by budget share.
+// This is a known data-model gap — replace with real assignment data once available.
+export type WPCostStatus = 'under_budget' | 'on_budget' | 'over_budget'
+
+export interface WPCostReconciliation {
+  id: string
+  packageCode: string
+  category: string | null
+  subcategory: string | null
+  budget: number
+  estActualCost: number
+  variance: number          // positive = under budget, negative = over
+  status: WPCostStatus
+  wpStatus: WorkPackageStatus
+}
+
+export function getWorkPackageCostReconciliation(_projectId: string): WPCostReconciliation[] {
+  // Non-rejected WPs only.
+  const relevantWPs = MOCK_WORK_PACKAGES.filter(wp => wp.status !== 'rejected_archived')
+
+  return relevantWPs.map(wp => {
+    let estActualCost: number
+
+    if (wp.status === 'completed' && wp.actual_cost !== null) {
+      // Completed WPs with audited actual cost — use that directly.
+      estActualCost = wp.actual_cost
+    } else {
+      // TRADE-CATEGORY MATCHING STAND-IN:
+      // No worker↔work-package assignment table exists yet in the schema — this is a known gap.
+      // We check whether this WP's subcategory maps to any active trade categories (qualitative gate)
+      // and then derive an estimated cost from budget × physical-progress × a deterministic cost-
+      // efficiency factor (seeded per WP id, range 0.72–1.32). This creates realistic variance
+      // (some WPs trending over budget, others under) without requiring real assignment data.
+      // Replace this estimate with sum(assigned_worker_hours × rate) once assignments exist.
+      const trades     = WP_TRADE_MAP[wp.subcategory ?? ''] ?? []
+      const hasMatched = trades.length > 0 &&
+        MOCK_WORKERS.some(w => trades.includes(w.trade_category ?? ''))
+
+      if (!hasMatched) {
+        estActualCost = 0
+      } else {
+        const budget           = wp.budget_amount ?? 0
+        const progressFraction = (wp.physical_progress ?? 0) / 100
+        // 0.60–1.50 cost-efficiency factor: values > 1 mean over-budget pace.
+        // Wide range ensures high-progress WPs can realistically tip over budget.
+        const efficiencyFactor = 0.60 + seededRand(wp.id + 'cost-eff') * 0.90
+        estActualCost = Math.round(budget * progressFraction * efficiencyFactor)
+      }
+    }
+
+    const budget   = wp.budget_amount ?? 0
+    const variance = budget - estActualCost
+
+    let status: WPCostStatus
+    if (budget === 0) {
+      status = 'on_budget'
+    } else if (variance >  budget * 0.10) {
+      status = 'under_budget'
+    } else if (variance >= -budget * 0.10) {
+      status = 'on_budget'
+    } else {
+      status = 'over_budget'
+    }
+
+    return {
+      id: wp.id,
+      packageCode: wp.package_code,
+      category:    wp.category,
+      subcategory: wp.subcategory,
+      budget,
+      estActualCost,
+      variance,
+      status,
+      wpStatus: wp.status,
+    } satisfies WPCostReconciliation
+  })
+  .sort((a, b) => a.variance - b.variance) // worst overruns first (most negative → most positive)
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Labour Cost KPIs (30-day rolling window)
+// ---------------------------------------------------------------------------
+export interface LabourCostKPIs {
+  monthlyCost: number
+  overtimeCost: number
+  idleCostEstimate: number
+  budgetUtilizationPct: number
+}
+
+export function getLabourCostKPIs(_projectId: string): LabourCostKPIs {
+  const workerMap  = new Map(MOCK_WORKERS.map(w => [w.id, w]))
+  const monthRecs  = MOCK_ATTENDANCE.filter(r => r.date >= MONTHLY_COST_START)
+
+  let regularCost  = 0
+  let overtimeCost = 0
+
+  for (const rec of monthRecs) {
+    if (rec.status === 'absent' || !rec.working_hours) continue
+    const worker = workerMap.get(rec.worker_id)
+    if (!worker) continue
+    regularCost  += rec.working_hours  * HOURLY_RATES[worker.worker_type]
+    overtimeCost += rec.overtime_hours * OT_RATES[worker.worker_type]
+  }
+
+  // Idle cost: attention-band workers' paid-but-underutilised portion this period.
+  const allScores      = buildProductivityScores()
+  const attentionIds   = new Set(allScores.filter(s => s.band === 'attention').map(s => s.workerId))
+  const scoreMap       = new Map(allScores.map(s => [s.workerId, s.score]))
+  let idleCostEstimate = 0
+
+  for (const rec of monthRecs) {
+    if (!attentionIds.has(rec.worker_id) || rec.status === 'absent' || !rec.working_hours) continue
+    const worker = workerMap.get(rec.worker_id)
+    if (!worker) continue
+    const score = scoreMap.get(rec.worker_id) ?? 0
+    idleCostEstimate += rec.working_hours * HOURLY_RATES[worker.worker_type] * (1 - score / 100)
+  }
+
+  // Budget utilization = total estimated actual cost across WPs / total budget.
+  const reconciliation     = getWorkPackageCostReconciliation(_projectId)
+  const totalBudget        = reconciliation.reduce((s, r) => s + r.budget, 0)
+  const totalEstActual     = reconciliation.reduce((s, r) => s + r.estActualCost, 0)
+  const budgetUtilizationPct = totalBudget > 0 ? Math.round((totalEstActual / totalBudget) * 100) : 0
+
+  return {
+    monthlyCost:        Math.round(regularCost + overtimeCost),
+    overtimeCost:       Math.round(overtimeCost),
+    idleCostEstimate:   Math.round(idleCostEstimate),
+    budgetUtilizationPct,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Labour cost trend (RM cost per bucket)
+// ---------------------------------------------------------------------------
+export function getLabourCostTrend(_projectId: string, granularity: Granularity): TrendPoint[] {
+  const workerMap = new Map(MOCK_WORKERS.map(w => [w.id, w]))
+  return [...buildBuckets(granularity).entries()].map(([key, recs]) => {
+    let cost = 0
+    for (const rec of recs) {
+      if (rec.status === 'absent' || !rec.working_hours) continue
+      const worker = workerMap.get(rec.worker_id)
+      if (!worker) continue
+      cost += rec.working_hours  * HOURLY_RATES[worker.worker_type]
+            + rec.overtime_hours * OT_RATES[worker.worker_type]
+    }
+    return { label: formatLabel(key, granularity), value: Math.round(cost) }
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Labour cost by worker type (6-month totals)
+// ---------------------------------------------------------------------------
+export interface LabourCostByTypeRow {
+  workerType: WorkerType
+  label:      string
+  totalCost:  number
+}
+
+export function getLabourCostByWorkerType(_projectId: string): LabourCostByTypeRow[] {
+  const types: WorkerType[] = ['general_worker', 'subcon', 'subcon_as_gw', 'operator', 'staff']
+  const workerMap = new Map(MOCK_WORKERS.map(w => [w.id, w]))
+  const costByType = new Map<WorkerType, number>()
+
+  for (const rec of MOCK_ATTENDANCE) {
+    if (rec.status === 'absent' || !rec.working_hours) continue
+    const worker = workerMap.get(rec.worker_id)
+    if (!worker) continue
+    const cost = rec.working_hours  * HOURLY_RATES[worker.worker_type]
+               + rec.overtime_hours * OT_RATES[worker.worker_type]
+    costByType.set(worker.worker_type, (costByType.get(worker.worker_type) ?? 0) + cost)
+  }
+
+  return types.map(type => ({
+    workerType: type,
+    label:      WORKER_TYPE_LABELS[type],
+    totalCost:  Math.round(costByType.get(type) ?? 0),
+  }))
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Idle cost breakdown — attention-band workers, for the 30-day window
+// ---------------------------------------------------------------------------
+export interface IdleCostWorker {
+  workerId:         string
+  name:             string
+  workerType:       WorkerType
+  score:            number
+  estimatedIdleCost: number
+}
+
+export function getIdleCostBreakdown(_projectId: string): IdleCostWorker[] {
+  const workerMap    = new Map(MOCK_WORKERS.map(w => [w.id, w]))
+  const allScores    = buildProductivityScores()
+  const attnWorkers  = allScores.filter(s => s.band === 'attention')
+  const monthRecs    = MOCK_ATTENDANCE.filter(r => r.date >= MONTHLY_COST_START)
+
+  return attnWorkers.map(ws => {
+    const worker = workerMap.get(ws.workerId)
+    if (!worker) return null
+    const rate    = HOURLY_RATES[worker.worker_type]
+    const myRecs  = monthRecs.filter(r =>
+      r.worker_id === ws.workerId && r.status !== 'absent' && r.working_hours !== null,
+    )
+    const idleCost = myRecs.reduce(
+      (s, r) => s + (r.working_hours ?? 0) * rate * (1 - ws.score / 100),
+      0,
+    )
+    return { workerId: ws.workerId, name: ws.name, workerType: ws.workerType, score: ws.score, estimatedIdleCost: Math.round(idleCost) }
+  })
+  .filter((r): r is IdleCostWorker => r !== null && r.estimatedIdleCost > 0)
+  .sort((a, b) => b.estimatedIdleCost - a.estimatedIdleCost)
 }
 
 export function getWPAttentionList(_projectId: string): WPAttentionItem[] {

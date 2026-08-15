@@ -23,6 +23,8 @@ const STATUS_VARIANT_MAP: Record<string, BadgeVariant> = {
   attention:       'alert',
   // Labour cost
   within_budget:   'positive',
+  under_budget:    'positive',
+  on_budget:       'accent',
   over_budget:     'alert',
 }
 
@@ -49,6 +51,8 @@ const STATUS_LABELS: Record<string, string> = {
   normal:            'Normal',
   attention:         'Attention',
   within_budget:     'Within Budget',
+  under_budget:      'Under Budget',
+  on_budget:         'On Budget',
   over_budget:       'Over Budget',
 }
 
