@@ -226,9 +226,12 @@ function makeAttendance(): AttendanceRecord[] {
       ? 0  // weekend → everyone absent
       : 0.83 + seededRand(dateStr + 'att') * 0.12 - mondayPenalty
 
-    // Avg working hours this day: range 6.8–8.2
-    // Day-level hours base: wider swing so daily averages vary visibly (6.0–9.5)
-    const dayHoursBase = 6.0 + seededRand(dateStr + 'hrs') * 3.5
+    // ~8% of weekdays are "short days" (rain shutdown, inspection, half-day)
+    // where the site clocks off early — average drops to 1–2.5 h
+    const isShortDay = !isWeekend && seededRand(dateStr + 'short') < 0.08
+    const dayHoursBase = isShortDay
+      ? 0.8 + seededRand(dateStr + 'hrs') * 1.7   // 0.8–2.5 h
+      : 6.0 + seededRand(dateStr + 'hrs') * 3.5   // 6.0–9.5 h
 
     // OT probability — interpolate from monthly curve + daily noise
     const monthsFromFeb = (dateObj.getFullYear() - 2025) * 12 + dateObj.getMonth() - 1
