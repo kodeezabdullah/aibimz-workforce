@@ -236,7 +236,7 @@ function HeadcountComboChart({ data }: { data: HeadcountDatum[] }) {
           dataKey="Headcount"
           fill={C_BAR_BLUE}
           radius={[6, 6, 0, 0]}
-          maxBarSize={54}
+          maxBarSize={96}
         />
 
         <Line

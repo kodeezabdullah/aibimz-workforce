@@ -84,6 +84,16 @@ export const MOCK_PROJECT: Project = {
   created_at: '2024-10-01T08:00:00Z',
 }
 
+// Per-type hours bias — creates steep peaks/valleys on the headcount combo chart.
+// Operators run heavy machinery (long shifts); subcon_as_gw are part-time on site.
+const WORKER_TYPE_HRS_BIAS: Record<WorkerType, number> = {
+  operator:       3.5,
+  general_worker: 0.8,
+  subcon:        -0.5,
+  staff:         -2.5,
+  subcon_as_gw:  -4.0,
+}
+
 const TRADE_CATEGORIES: Record<WorkerType, string[]> = {
   general_worker: ['Civil Works', 'Structural', 'Finishing', 'Excavation', 'Concrete'],
   staff:          ['Site Supervisor', 'QS Engineer', 'Safety Officer', 'Project Engineer'],
@@ -271,12 +281,12 @@ function makeAttendance(): AttendanceRecord[] {
 
       const isAttending = status !== 'absent'
 
-      // Each worker has a stable personal tendency (±2h) seeded by their ID
+      // Worker personal tendency (±2h) + type-level bias for steep chart profile
       const workerHrsProfile = (seededRand(worker.id + 'hrs-profile') - 0.5) * 4.0
-      // Plus a per-day individual noise (±1h)
+      const typeHrsBias      = WORKER_TYPE_HRS_BIAS[worker.worker_type]
       const working_hours = isAttending
-        ? Math.max(3.0, Math.min(12.0, Math.round(
-            (dayHoursBase + workerHrsProfile + (rHrs - 0.5) * 2.0
+        ? Math.max(2.0, Math.min(13.0, Math.round(
+            (dayHoursBase + workerHrsProfile + typeHrsBias + (rHrs - 0.5) * 2.0
               - (status === 'late' ? 0.8 : 0)
               - (status === 'early_leave' ? 1.2 : 0)) * 100) / 100))
         : null
