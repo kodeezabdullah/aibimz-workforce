@@ -28,6 +28,8 @@ workflows, but this project is a separate, independently-branded product.
 - **No blue anywhere** in the palette — pick accent colors deliberately,
   avoid it as a default.
 - **No Inter font.** Choose a different, deliberate type pairing.
+- See **`docs/design-system.md`** for the full token reference: palette table,
+  status colour mapping, type scale, spacing, radius/shadow rules, and do/don't.
 
 ## Folder structure
 
