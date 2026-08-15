@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { ChevronDown, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +18,7 @@ const MOCK_USER = {
 }
 
 export function Topbar() {
+  const pathname = usePathname()
   const [activeProject, setActiveProject] = useState(MOCK_PROJECTS[0])
   const [projectOpen, setProjectOpen] = useState(false)
 
@@ -86,6 +88,11 @@ export function Topbar() {
           </div>
         )}
       </div>
+
+      {/* DEV: path indicator — remove before shipping */}
+      <span className="hidden md:block font-mono text-xs text-[var(--color-ink-muted)] bg-[var(--color-bg)] border border-[var(--color-border)] px-2 py-0.5 rounded">
+        {pathname}
+      </span>
 
       {/* Right side: notifications + user */}
       <div className="flex items-center gap-3">
