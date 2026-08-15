@@ -37,44 +37,46 @@ const TRIANGLE_COLORS: Record<ProjectListingStatus, string> = {
 
 function CornerRibbon({ status }: { status: ProjectListingStatus }) {
   const color = TRIANGLE_COLORS[status]
-  const label = status === 'On Hold' ? 'Hold' : status   // "On Hold" is too long
+  const label = status === 'On Hold' ? 'Hold' : status
   return (
-    <>
-      <div
-        aria-hidden
-        style={{
-          position:    'absolute',
-          top:         0,
-          right:       0,
-          width:       0,
-          height:      0,
-          borderStyle: 'solid',
-          borderWidth: '0 64px 64px 0',
-          borderColor: `transparent ${color} transparent transparent`,
-          borderRadius: '0 10px 0 0',
-        }}
-      />
+    // clip-path hard-clips both the fill and the text to the triangle —
+    // nothing can bleed outside regardless of label length.
+    <div
+      aria-hidden
+      style={{
+        position:   'absolute',
+        top:        0,
+        right:      0,
+        width:      80,
+        height:     80,
+        clipPath:   'polygon(0 0, 100% 0, 100% 100%)',
+        pointerEvents: 'none',
+      }}
+    >
+      {/* Solid fill covers the whole clipped area */}
+      <div style={{ position: 'absolute', inset: 0, backgroundColor: color }} />
+      {/* Text centred along the hypotenuse */}
       <span
         style={{
-          position:       'absolute',
-          top:            12,
-          right:          -2,
-          width:          54,
-          textAlign:      'center',
-          transform:      'rotate(45deg)',
-          transformOrigin:'center',
-          color:          '#fff',
-          fontSize:       9,
-          fontWeight:     700,
-          letterSpacing:  '0.06em',
-          textTransform:  'uppercase',
-          pointerEvents:  'none',
-          lineHeight:     1,
+          position:        'absolute',
+          top:             18,
+          right:           4,
+          width:           56,
+          textAlign:       'center',
+          transform:       'rotate(45deg)',
+          transformOrigin: 'center',
+          color:           '#fff',
+          fontSize:        9,
+          fontWeight:      700,
+          letterSpacing:   '0.06em',
+          textTransform:   'uppercase',
+          lineHeight:      1,
+          whiteSpace:      'nowrap',
         }}
       >
         {label}
       </span>
-    </>
+    </div>
   )
 }
 

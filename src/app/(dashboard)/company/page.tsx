@@ -20,44 +20,40 @@ const TRIANGLE_COLORS: Record<CompanyStatus, string> = {
 function CornerRibbon({ status }: { status: CompanyStatus }) {
   const color = TRIANGLE_COLORS[status]
   return (
-    <>
-      {/* Triangle fill — top-right corner */}
-      <div
-        aria-hidden
-        style={{
-          position:    'absolute',
-          top:         0,
-          right:       0,
-          width:       0,
-          height:      0,
-          borderStyle: 'solid',
-          borderWidth: '0 64px 64px 0',
-          borderColor: `transparent ${color} transparent transparent`,
-          borderRadius: '0 10px 0 0',
-        }}
-      />
-      {/* Status label rotated 45° inside the triangle */}
+    <div
+      aria-hidden
+      style={{
+        position:      'absolute',
+        top:           0,
+        right:         0,
+        width:         80,
+        height:        80,
+        clipPath:      'polygon(0 0, 100% 0, 100% 100%)',
+        pointerEvents: 'none',
+      }}
+    >
+      <div style={{ position: 'absolute', inset: 0, backgroundColor: color }} />
       <span
         style={{
-          position:   'absolute',
-          top:        12,
-          right:      -2,
-          width:      54,
-          textAlign:  'center',
-          transform:  'rotate(45deg)',
+          position:        'absolute',
+          top:             18,
+          right:           4,
+          width:           56,
+          textAlign:       'center',
+          transform:       'rotate(45deg)',
           transformOrigin: 'center',
-          color:      '#fff',
-          fontSize:   9,
-          fontWeight: 700,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          pointerEvents: 'none',
-          lineHeight: 1,
+          color:           '#fff',
+          fontSize:        9,
+          fontWeight:      700,
+          letterSpacing:   '0.06em',
+          textTransform:   'uppercase',
+          lineHeight:      1,
+          whiteSpace:      'nowrap',
         }}
       >
         {status}
       </span>
-    </>
+    </div>
   )
 }
 
