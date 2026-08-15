@@ -53,12 +53,6 @@ const OPENING_MESSAGE: Message = {
 // Insight severity helpers
 // ---------------------------------------------------------------------------
 
-const SEVERITY_RAIL: Record<InsightSeverity, string> = {
-  info:     'bg-[var(--color-accent)]',
-  warning:  'bg-[var(--color-pending)]',
-  critical: 'bg-[var(--color-alert)]',
-}
-
 const SEVERITY_BADGE: Record<InsightSeverity, string> = {
   info:     'text-[var(--color-accent)]    bg-[#FEF3C7]',
   warning:  'text-[var(--color-pending)]   bg-[#FEF9EA]',
@@ -77,8 +71,7 @@ const SEVERITY_LABEL: Record<InsightSeverity, string> = {
 
 function InsightCard({ insight }: { insight: AutoInsight }) {
   return (
-    <div className="bg-surface rounded-xl border border-border flex overflow-hidden flex-1 min-w-0">
-      <div className={cn('w-1 flex-shrink-0', SEVERITY_RAIL[insight.severity])} />
+    <div className="bg-surface rounded-xl border border-border flex flex-1 min-w-0">
       <div className="flex flex-col gap-2 p-4 min-w-0 w-full">
         <span
           className={cn(
