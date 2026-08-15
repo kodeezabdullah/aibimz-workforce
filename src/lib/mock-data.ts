@@ -1612,11 +1612,14 @@ export function getProjectsList(): ProjectListing[] {
 // ---------------------------------------------------------------------------
 // Companies
 // ---------------------------------------------------------------------------
+export type CompanyStatus = 'New' | 'Active' | 'Inactive'
+
 export interface Company {
   id: string
   name: string
   registrationNo: string
   joinedDate: string  // "YYYY-MM-DD"
+  status: CompanyStatus
 }
 
 export const MOCK_COMPANIES: Company[] = [
@@ -1625,24 +1628,28 @@ export const MOCK_COMPANIES: Company[] = [
     name: 'Prisma Maju Sdn Bhd',
     registrationNo: '892341-T',
     joinedDate: '2022-06-01',
+    status: 'Active',
   },
   {
     id: 'company-002',
     name: 'Mutiara Jaya Sdn Bhd',
     registrationNo: '456788-X',
     joinedDate: '2021-03-15',
+    status: 'Active',
   },
   {
     id: 'company-003',
     name: 'Kota Bina Resources',
     registrationNo: '1103456-U',
-    joinedDate: '2023-01-10',
+    joinedDate: '2026-07-10',
+    status: 'New',
   },
   {
     id: 'company-004',
     name: 'Alam Baru Construction',
     registrationNo: '734521-A',
     joinedDate: '2022-09-20',
+    status: 'Inactive',
   },
 ]
 
