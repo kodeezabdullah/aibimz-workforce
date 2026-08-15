@@ -13,8 +13,10 @@ import {
   LabelList,
   AreaChart as RechartAreaChart,
   Area,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts'
-import { DonutChart } from '@tremor/react'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { ChartCard } from '@/components/dashboard/ChartCard'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
@@ -441,7 +443,7 @@ export default function DashboardPage() {
 
         {/* Today's Attendance donut */}
         <ChartCard className="lg:col-span-2" title="Today's Attendance">
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <StatusBadge status={todayAtt.periodStatus} />
               {todayAtt.periodStatus === 'processing' && (
@@ -452,22 +454,32 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-6">
-              {/* Donut — emerald = positive (attending), rose = alert (absent) */}
+              {/* Custom donut — theme color + light gray */}
               <div className="relative shrink-0">
-                <DonutChart
-                  data={donutData}
-                  category="value"
-                  index="name"
-                  colors={['emerald', 'rose']}
-                  showAnimation={true}
-                  showLabel={false}
-                  className="h-36 w-36"
-                />
+                <PieChart width={160} height={160}>
+                  <Pie
+                    data={donutData}
+                    cx={78}
+                    cy={78}
+                    innerRadius={54}
+                    outerRadius={76}
+                    startAngle={90}
+                    endAngle={-270}
+                    dataKey="value"
+                    stroke="none"
+                    isAnimationActive={true}
+                  >
+                    <Cell fill={C_MINT} />
+                    <Cell fill="#E8E3DA" />
+                  </Pie>
+                </PieChart>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="font-display text-2xl font-semibold text-[var(--color-ink)] leading-none">
+                  <span className="font-display text-2xl font-bold text-[var(--color-ink)] leading-none">
                     {todayAtt.rate}%
                   </span>
-                  <span className="text-[10px] text-[var(--color-ink-muted)] mt-0.5">rate</span>
+                  <span className="text-[10px] text-[var(--color-ink-muted)] mt-1 text-center leading-tight">
+                    Attendance<br />Rate
+                  </span>
                 </div>
               </div>
 
