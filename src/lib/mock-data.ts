@@ -1540,6 +1540,116 @@ export function getIdleCostBreakdown(_projectId: string): IdleCostWorker[] {
   .sort((a, b) => b.estimatedIdleCost - a.estimatedIdleCost)
 }
 
+// ---------------------------------------------------------------------------
+// Project listings (extended — used on Project List page only)
+// ---------------------------------------------------------------------------
+export type ProjectType = 'Highrise' | 'Landed' | 'Infrastructure'
+export type ProjectListingStatus = 'Ongoing' | 'Completed' | 'On Hold'
+
+export interface ProjectListing {
+  id: string
+  code: string
+  name: string
+  type: ProjectType
+  status: ProjectListingStatus
+  company: string
+  location: string
+  isCurrent: boolean
+  created_at: string
+}
+
+export const MOCK_PROJECTS_LIST: ProjectListing[] = [
+  {
+    id: PROJECT_ID,
+    code: 'BKT2SA',
+    name: 'Bukit 2 Site A',
+    type: 'Highrise',
+    status: 'Ongoing',
+    company: 'Prisma Maju Sdn Bhd',
+    location: 'Bukit Jalil, Kuala Lumpur',
+    isCurrent: true,
+    created_at: '2024-10-01T08:00:00Z',
+  },
+  {
+    id: 'hjd1nw-proj-0002-0000-000000000002',
+    code: 'HJD1NW',
+    name: 'Hijau 1 North Wing',
+    type: 'Landed',
+    status: 'Ongoing',
+    company: 'Mutiara Jaya Sdn Bhd',
+    location: 'Semenyih, Selangor',
+    isCurrent: false,
+    created_at: '2024-07-15T08:00:00Z',
+  },
+  {
+    id: 'kltbr-proj-0003-0000-000000000003',
+    code: 'KLTBR',
+    name: 'KL Trunk Road Bridge Rehab',
+    type: 'Infrastructure',
+    status: 'On Hold',
+    company: 'Alam Baru Construction',
+    location: 'Cheras, Kuala Lumpur',
+    isCurrent: false,
+    created_at: '2023-11-20T08:00:00Z',
+  },
+  {
+    id: 'sdm3sa-proj-0004-0000-000000000004',
+    code: 'SDM3SA',
+    name: 'Serdang 3 Site A',
+    type: 'Highrise',
+    status: 'Completed',
+    company: 'Kota Bina Resources',
+    location: 'Serdang, Selangor',
+    isCurrent: false,
+    created_at: '2022-03-10T08:00:00Z',
+  },
+]
+
+export function getProjectsList(): ProjectListing[] {
+  return MOCK_PROJECTS_LIST
+}
+
+// ---------------------------------------------------------------------------
+// Companies
+// ---------------------------------------------------------------------------
+export interface Company {
+  id: string
+  name: string
+  registrationNo: string
+  joinedDate: string  // "YYYY-MM-DD"
+}
+
+export const MOCK_COMPANIES: Company[] = [
+  {
+    id: 'company-001',
+    name: 'Prisma Maju Sdn Bhd',
+    registrationNo: '892341-T',
+    joinedDate: '2022-06-01',
+  },
+  {
+    id: 'company-002',
+    name: 'Mutiara Jaya Sdn Bhd',
+    registrationNo: '456788-X',
+    joinedDate: '2021-03-15',
+  },
+  {
+    id: 'company-003',
+    name: 'Kota Bina Resources',
+    registrationNo: '1103456-U',
+    joinedDate: '2023-01-10',
+  },
+  {
+    id: 'company-004',
+    name: 'Alam Baru Construction',
+    registrationNo: '734521-A',
+    joinedDate: '2022-09-20',
+  },
+]
+
+export function getCompanies(): Company[] {
+  return MOCK_COMPANIES
+}
+
 export function getWPAttentionList(_projectId: string): WPAttentionItem[] {
   const scores   = buildProductivityScores()
   const activeWPs = MOCK_WORK_PACKAGES.filter(

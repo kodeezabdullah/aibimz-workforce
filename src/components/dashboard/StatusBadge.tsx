@@ -26,6 +26,10 @@ const STATUS_VARIANT_MAP: Record<string, BadgeVariant> = {
   under_budget:    'positive',
   on_budget:       'accent',
   over_budget:     'alert',
+  // Project listing
+  Ongoing:         'accent',
+  Completed:       'positive',
+  'On Hold':       'pending',
 }
 
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
@@ -54,6 +58,9 @@ const STATUS_LABELS: Record<string, string> = {
   under_budget:      'Under Budget',
   on_budget:         'On Budget',
   over_budget:       'Over Budget',
+  Ongoing:           'Ongoing',
+  Completed:         'Completed',
+  'On Hold':         'On Hold',
 }
 
 interface StatusBadgeProps {
