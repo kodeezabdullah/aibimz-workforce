@@ -238,7 +238,7 @@ function HeadcountComboChart({ data }: { data: HeadcountDatum[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Trend area chart — full Recharts control: monotone line, gradient fill, dots
+// Trend area chart — monotone dashed line, gradient fill, always-visible dots
 // ---------------------------------------------------------------------------
 interface TrendAreaChartProps {
   data: Record<string, string | number>[]
@@ -246,8 +246,8 @@ interface TrendAreaChartProps {
   color: string
   /** Gradient ID must be unique per chart on the page */
   gradientId: string
+  granularity: Granularity
   unit?: string
-  tickInterval?: number | 'preserveStartEnd'
 }
 
 function TrendAreaChart({
@@ -255,18 +255,29 @@ function TrendAreaChart({
   dataKey,
   color,
   gradientId,
+  granularity,
   unit = '',
-  tickInterval,
 }: TrendAreaChartProps) {
-  const autoInterval: number | 'preserveStartEnd' =
-    tickInterval ?? (data.length > 14 ? Math.ceil(data.length / 6) : 'preserveStartEnd')
+  const isDaily = granularity === 'daily'
+
+  // Daily: show every label angled; weekly/monthly: sparse auto interval
+  const xInterval: number | 'preserveStartEnd' = isDaily
+    ? 0
+    : data.length > 14 ? Math.ceil(data.length / 6) : 'preserveStartEnd'
+
+  const xTickStyle = isDaily
+    ? { ...AXIS_STYLE, angle: -45, textAnchor: 'end' as const, dy: 4 }
+    : AXIS_STYLE
 
   return (
-    <ResponsiveContainer width="100%" height={176}>
-      <RechartAreaChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={isDaily ? 208 : 176}>
+      <RechartAreaChart
+        data={data}
+        margin={{ top: 8, right: 8, left: -8, bottom: isDaily ? 52 : 4 }}
+      >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor={color} stopOpacity={0.18} />
+            <stop offset="0%"   stopColor={color} stopOpacity={0.12} />
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
@@ -275,11 +286,11 @@ function TrendAreaChart({
 
         <XAxis
           dataKey="date"
-          tick={AXIS_STYLE}
+          tick={xTickStyle}
           axisLine={{ stroke: C_BORDER }}
           tickLine={false}
-          interval={autoInterval}
-          minTickGap={44}
+          interval={xInterval}
+          minTickGap={isDaily ? 0 : 44}
         />
 
         <YAxis
@@ -307,10 +318,11 @@ function TrendAreaChart({
           type="monotone"
           dataKey={dataKey}
           stroke={color}
-          strokeWidth={2.5}
+          strokeWidth={2}
+          strokeDasharray="6 3"
           fill={`url(#${gradientId})`}
-          dot={{ r: 3, fill: color, stroke: C_SURFACE, strokeWidth: 1.5 }}
-          activeDot={{ r: 5, fill: color, stroke: C_SURFACE, strokeWidth: 2 }}
+          dot={{ r: 3.5, fill: color, stroke: C_SURFACE, strokeWidth: 1.5 }}
+          activeDot={{ r: 5.5, fill: color, stroke: C_SURFACE, strokeWidth: 2 }}
           isAnimationActive={true}
         />
       </RechartAreaChart>
@@ -467,6 +479,7 @@ export default function DashboardPage() {
               dataKey="Attendance %"
               color={C_POSITIVE}
               gradientId="grad-att"
+              granularity={granularity}
               unit="%"
             />
           </ChartCard>
@@ -477,6 +490,7 @@ export default function DashboardPage() {
               dataKey="Avg Hours"
               color={C_ACCENT}
               gradientId="grad-hours"
+              granularity={granularity}
               unit="h"
             />
           </ChartCard>
@@ -487,6 +501,7 @@ export default function DashboardPage() {
               dataKey="OT Hours"
               color={C_PENDING}
               gradientId="grad-ot"
+              granularity={granularity}
               unit="h"
             />
           </ChartCard>
@@ -497,6 +512,7 @@ export default function DashboardPage() {
               dataKey="Workers"
               color={C_ACCENT}
               gradientId="grad-manpower"
+              granularity={granularity}
             />
           </ChartCard>
 

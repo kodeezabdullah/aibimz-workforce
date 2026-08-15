@@ -61,9 +61,20 @@ export interface WorkPackage {
 }
 
 // ---------------------------------------------------------------------------
-// Raw mock data
+// Seeded pseudo-random — deterministic, stable across reloads
+// FNV-1a hash → float [0, 1)
 // ---------------------------------------------------------------------------
+function seededRand(seed: string): number {
+  let h = 2166136261
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 16777619)
+  }
+  return ((h >>> 0) % 100000) / 100000
+}
 
+// ---------------------------------------------------------------------------
+// Raw mock data — project & workers
+// ---------------------------------------------------------------------------
 const PROJECT_ID = 'bkt2sa-proj-0001-0000-000000000001'
 
 export const MOCK_PROJECT: Project = {
@@ -73,23 +84,19 @@ export const MOCK_PROJECT: Project = {
   created_at: '2024-10-01T08:00:00Z',
 }
 
-// --- Workers (42 total, realistic distribution) ---
-// general_worker ~40%, subcon ~30%, subcon_as_gw ~15%, operator ~10%, staff ~5%
-const TRADE_CATEGORIES = {
+const TRADE_CATEGORIES: Record<WorkerType, string[]> = {
   general_worker: ['Civil Works', 'Structural', 'Finishing', 'Excavation', 'Concrete'],
-  staff: ['Site Supervisor', 'QS Engineer', 'Safety Officer', 'Project Engineer'],
-  subcon: ['M&E Works', 'Plumbing', 'Roofing', 'Tiling', 'Painting'],
-  operator: ['Tower Crane', 'Excavator', 'Forklift', 'Concrete Pump'],
-  subcon_as_gw: ['Civil Works', 'Structural', 'Carpentry'],
+  staff:          ['Site Supervisor', 'QS Engineer', 'Safety Officer', 'Project Engineer'],
+  subcon:         ['M&E Works', 'Plumbing', 'Roofing', 'Tiling', 'Painting'],
+  operator:       ['Tower Crane', 'Excavator', 'Forklift', 'Concrete Pump'],
+  subcon_as_gw:   ['Civil Works', 'Structural', 'Carpentry'],
 }
-const SUBCON_COMPANIES = ['Mutiara Jaya Sdn Bhd', 'Kota Bina Resources', 'Prisma Maju Sdn Bhd', 'Alam Baru Construction']
+const SUBCON_COMPANIES = [
+  'Mutiara Jaya Sdn Bhd', 'Kota Bina Resources',
+  'Prisma Maju Sdn Bhd',  'Alam Baru Construction',
+]
 
-function makeWorker(
-  idx: number,
-  type: WorkerType,
-  name: string,
-  company?: string,
-): Worker {
+function makeWorker(idx: number, type: WorkerType, name: string, company?: string): Worker {
   return {
     id: `worker-${String(idx).padStart(3, '0')}`,
     project_id: PROJECT_ID,
@@ -120,125 +127,169 @@ export const MOCK_WORKERS: Worker[] = [
   makeWorker(15, 'general_worker', 'Selvam a/l Ponnusamy'),
   makeWorker(16, 'general_worker', 'Azri bin Latif'),
   makeWorker(17, 'general_worker', 'Ng Boon Keat'),
-
   // Subcon (13)
-  makeWorker(18, 'subcon', 'Raziman bin Osman',    SUBCON_COMPANIES[0]),
-  makeWorker(19, 'subcon', 'Lee Chee Wah',         SUBCON_COMPANIES[1]),
-  makeWorker(20, 'subcon', 'Kumaresan a/l Samy',   SUBCON_COMPANIES[0]),
-  makeWorker(21, 'subcon', 'Firdaus bin Rosli',    SUBCON_COMPANIES[2]),
-  makeWorker(22, 'subcon', 'Tan Beng Huat',        SUBCON_COMPANIES[1]),
-  makeWorker(23, 'subcon', 'Ariffin bin Md Salleh',SUBCON_COMPANIES[3]),
-  makeWorker(24, 'subcon', 'Ravi a/l Gunasegaran', SUBCON_COMPANIES[2]),
-  makeWorker(25, 'subcon', 'Mohd Hafiz bin Ismail',SUBCON_COMPANIES[0]),
-  makeWorker(26, 'subcon', 'Loh Chin Keong',       SUBCON_COMPANIES[3]),
-  makeWorker(27, 'subcon', 'Shamsul bin Bakar',    SUBCON_COMPANIES[1]),
-  makeWorker(28, 'subcon', 'Vijay a/l Devarajan',  SUBCON_COMPANIES[2]),
-  makeWorker(29, 'subcon', 'Azwan bin Mansor',     SUBCON_COMPANIES[3]),
-  makeWorker(30, 'subcon', 'Chia Kok Weng',        SUBCON_COMPANIES[0]),
-
-  // Subcon as GW (6)
+  makeWorker(18, 'subcon', 'Raziman bin Osman',     SUBCON_COMPANIES[0]),
+  makeWorker(19, 'subcon', 'Lee Chee Wah',          SUBCON_COMPANIES[1]),
+  makeWorker(20, 'subcon', 'Kumaresan a/l Samy',    SUBCON_COMPANIES[0]),
+  makeWorker(21, 'subcon', 'Firdaus bin Rosli',     SUBCON_COMPANIES[2]),
+  makeWorker(22, 'subcon', 'Tan Beng Huat',         SUBCON_COMPANIES[1]),
+  makeWorker(23, 'subcon', 'Ariffin bin Md Salleh', SUBCON_COMPANIES[3]),
+  makeWorker(24, 'subcon', 'Ravi a/l Gunasegaran',  SUBCON_COMPANIES[2]),
+  makeWorker(25, 'subcon', 'Mohd Hafiz bin Ismail', SUBCON_COMPANIES[0]),
+  makeWorker(26, 'subcon', 'Loh Chin Keong',        SUBCON_COMPANIES[3]),
+  makeWorker(27, 'subcon', 'Shamsul bin Bakar',     SUBCON_COMPANIES[1]),
+  makeWorker(28, 'subcon', 'Vijay a/l Devarajan',   SUBCON_COMPANIES[2]),
+  makeWorker(29, 'subcon', 'Azwan bin Mansor',      SUBCON_COMPANIES[3]),
+  makeWorker(30, 'subcon', 'Chia Kok Weng',         SUBCON_COMPANIES[0]),
+  // Subcon as GW (6) — join mid-project (~day 56)
   makeWorker(31, 'subcon_as_gw', 'Norazam bin Talib',    SUBCON_COMPANIES[1]),
   makeWorker(32, 'subcon_as_gw', 'Heng Kim Swee',         SUBCON_COMPANIES[2]),
   makeWorker(33, 'subcon_as_gw', 'Periasamy a/l Durai',   SUBCON_COMPANIES[0]),
   makeWorker(34, 'subcon_as_gw', 'Effendi bin Yusoff',    SUBCON_COMPANIES[3]),
   makeWorker(35, 'subcon_as_gw', 'Lim Yew Heng',          SUBCON_COMPANIES[1]),
   makeWorker(36, 'subcon_as_gw', 'Karunakaran a/l Nair',  SUBCON_COMPANIES[2]),
-
-  // Operators (4)
+  // Operators (4) — join late-project (~day 112)
   makeWorker(37, 'operator', 'Shahril bin Ramli'),
   makeWorker(38, 'operator', 'Chew Kin Hoe'),
   makeWorker(39, 'operator', 'Baharudin bin Musa'),
   makeWorker(40, 'operator', 'Gunalan a/l Suppiah'),
-
-  // Staff (2)
+  // Staff (2) — join late-project (~day 112)
   makeWorker(41, 'staff', 'Nurul Ain binti Malik'),
   makeWorker(42, 'staff', 'Kevin Tan Yong Sheng'),
 ]
 
-// --- Attendance: 30 days back from a reference date ---
-// Most-recent period (current 2nd half of month) = processing
-// Older periods = finalized
+// Worker join day (days from data start). Workers not yet joined have no records.
+function workerJoinDay(workerId: string): number {
+  const idx = parseInt(workerId.replace('worker-', ''), 10)
+  if (idx <= 30) return 0    // core crew — on site from day 1
+  if (idx <= 36) return 56   // subcon_as_gw batch joins ~week 9 (Apr)
+  return 112                  // operators + staff join ~week 17 (Jun)
+}
 
-const REF_DATE = new Date('2025-08-15') // "today" in mock world
+// ---------------------------------------------------------------------------
+// Attendance generation — 180 days, day-level variation baked in
+// ---------------------------------------------------------------------------
+const DAYS_OF_DATA = 180
+export const REF_DATE = new Date('2025-08-15')  // "today" in mock world
 
 function isoDate(d: Date): string {
   return d.toISOString().split('T')[0]
 }
 
+// Month-level OT probability curve (index = months since Feb 2025).
+// Simulates a project ramp-up with peak in May–Jun, then tapering.
+const OT_PROB_BY_MONTH = [
+  0.10,  // Feb 2025 — project warming up
+  0.16,  // Mar
+  0.24,  // Apr — work picking up
+  0.38,  // May — peak busy phase
+  0.35,  // Jun — still very busy
+  0.26,  // Jul — pressure easing
+  0.18,  // Aug — current (most recent)
+]
+
 function periodOf(date: Date): { period_type: PeriodType; period_status: PeriodStatus } {
-  const day = date.getDate()
-  const month = date.getMonth() // 0-indexed
+  const day      = date.getDate()
+  const month    = date.getMonth()
   const refMonth = REF_DATE.getMonth()
-  const refYear = REF_DATE.getFullYear()
-  const dYear = date.getFullYear()
+  const refYear  = REF_DATE.getFullYear()
+  const dYear    = date.getFullYear()
 
   const isCurrentPeriod =
-    dYear === refYear && month === refMonth && day >= 16 // 2nd half of Aug = processing
-
-  const period_type: PeriodType = day <= 15 ? '1st_half' : '2nd_half'
+    dYear === refYear && month === refMonth && day >= 16
+  const period_type: PeriodType   = day <= 15 ? '1st_half' : '2nd_half'
   const period_status: PeriodStatus = isCurrentPeriod ? 'processing' : 'finalized'
   return { period_type, period_status }
-}
-
-// Pseudo-random deterministic float [0,1) seeded by string
-function seededRand(seed: string): number {
-  let h = 2166136261
-  for (let i = 0; i < seed.length; i++) {
-    h = Math.imul(h ^ seed.charCodeAt(i), 16777619)
-  }
-  return ((h >>> 0) % 10000) / 10000
 }
 
 function makeAttendance(): AttendanceRecord[] {
   const records: AttendanceRecord[] = []
   let recIdx = 0
 
-  for (let d = 29; d >= 0; d--) {
+  // d counts calendar days back from REF_DATE. daysFromStart = DAYS_OF_DATA-1-d.
+  for (let d = DAYS_OF_DATA - 1; d >= 0; d--) {
     const dateObj = new Date(REF_DATE)
     dateObj.setDate(REF_DATE.getDate() - d)
-    const dateStr = isoDate(dateObj)
+    const dateStr      = isoDate(dateObj)
+    const dow          = dateObj.getDay()
+    const daysFromStart = DAYS_OF_DATA - 1 - d
+
+    const isWeekend = dow === 0 || dow === 6
+
     const { period_type, period_status } = periodOf(dateObj)
 
-    // Skip weekends (Sat=6, Sun=0)
-    const dow = dateObj.getDay()
-    if (dow === 0 || dow === 6) continue
+    // ── Day-level parameters (seeded by date, stable across renders) ──────
+    // Weekdays: 83–95% attendance (Monday –3% penalty).
+    // Weekends: site is shut — zero workers on Saturday and Sunday.
+    const mondayPenalty = dow === 1 ? 0.03 : 0
+    const dayAttRate = isWeekend
+      ? 0  // weekend → everyone absent
+      : 0.83 + seededRand(dateStr + 'att') * 0.12 - mondayPenalty
 
+    // Avg working hours this day: range 6.8–8.2
+    const dayHoursBase = 6.8 + seededRand(dateStr + 'hrs') * 1.4
+
+    // OT probability — interpolate from monthly curve + daily noise
+    const monthsFromFeb = (dateObj.getFullYear() - 2025) * 12 + dateObj.getMonth() - 1
+    const baseOtProb = OT_PROB_BY_MONTH[Math.max(0, Math.min(monthsFromFeb, 6))]
+    const dayOtProb  = baseOtProb * (0.75 + seededRand(dateStr + 'ot2') * 0.50)
+
+    // ── Per-worker records ─────────────────────────────────────────────────
     for (const worker of MOCK_WORKERS) {
-      const seed = `${worker.id}-${dateStr}`
-      const r = seededRand(seed)
-      const r2 = seededRand(seed + 'src')
-      const r3 = seededRand(seed + 'ot')
+      if (daysFromStart < workerJoinDay(worker.id)) continue  // not on site yet
 
-      // Subcon workers: monthly period
+      const seed  = `${worker.id}-${dateStr}`
+      const r     = seededRand(seed)           // attendance roll for this worker
+      const rType = seededRand(seed + 'type')  // present/late/early split
+      const rSrc  = seededRand(seed + 'src')   // source device
+      const rOt   = seededRand(seed + 'ot')    // OT hours amount
+      const rHrs  = seededRand(seed + 'hrs')   // individual hours noise
+
       const actualPeriodType: PeriodType =
         worker.worker_type === 'subcon' ? 'monthly' : period_type
 
-      // Realistic attendance distribution:
-      // ~78% present, ~10% absent, ~8% late, ~4% early_leave
+      // Attendance status: weekends are always absent; weekdays use day-level rate
       let status: AttendanceStatus
-      if (r < 0.78) status = 'present'
-      else if (r < 0.88) status = 'absent'
-      else if (r < 0.96) status = 'late'
-      else status = 'early_leave'
+      if (isWeekend) {
+        status = 'absent'
+      } else {
+        const effectiveRate = Math.min(0.97, Math.max(0.60, dayAttRate + (r - 0.5) * 0.08))
+        if (r >= effectiveRate) {
+          status = 'absent'
+        } else if (rType > 0.94) {
+          status = 'early_leave'
+        } else if (rType > 0.82) {
+          status = 'late'
+        } else {
+          status = 'present'
+        }
+      }
 
-      // Source distribution: rfid 65%, face_scan 25%, manual 10%
-      let source: AttendanceSource
-      if (r2 < 0.65) source = 'rfid'
-      else if (r2 < 0.90) source = 'face_scan'
-      else source = 'manual'
+      const isAttending = status !== 'absent'
 
-      const isPresent = status === 'present' || status === 'late' || status === 'early_leave'
-      const working_hours = isPresent ? (status === 'late' ? 6 + r * 1.5 : status === 'early_leave' ? 5 + r : 7 + r) : null
-      const overtime_hours = isPresent && r3 > 0.7 ? Math.round(r3 * 3 * 2) / 2 : 0
+      // Working hours: day base + small worker-level noise (±0.5h)
+      const working_hours = isAttending
+        ? Math.round((dayHoursBase + (rHrs - 0.5) * 1.0
+            - (status === 'late' ? 0.8 : 0)
+            - (status === 'early_leave' ? 1.2 : 0)) * 100) / 100
+        : null
+
+      // Overtime: probability driven by monthly OT curve + daily noise
+      const hasOt = isAttending && rOt < dayOtProb
+      const overtime_hours = hasOt ? Math.round((0.5 + rOt * 3.0) * 2) / 2 : 0
+
+      // Source: rfid 65%, face_scan 25%, manual 10%
+      const source: AttendanceSource =
+        rSrc < 0.65 ? 'rfid' : rSrc < 0.90 ? 'face_scan' : 'manual'
 
       records.push({
-        id: `att-${String(recIdx++).padStart(5, '0')}`,
-        worker_id: worker.id,
-        project_id: PROJECT_ID,
-        date: dateStr,
-        check_in: isPresent ? `07:${String(Math.floor(30 * r)).padStart(2, '0')}` : null,
-        check_out: isPresent ? `${16 + Math.floor(overtime_hours)}:${String(Math.floor(59 * r)).padStart(2, '0')}` : null,
-        working_hours: working_hours !== null ? Math.round(working_hours * 100) / 100 : null,
+        id: `att-${String(recIdx++).padStart(6, '0')}`,
+        worker_id:     worker.id,
+        project_id:    PROJECT_ID,
+        date:          dateStr,
+        check_in:      isAttending ? `07:${String(Math.floor(30 * r)).padStart(2, '0')}` : null,
+        check_out:     isAttending ? `${16 + Math.floor(overtime_hours)}:${String(Math.floor(59 * rHrs)).padStart(2, '0')}` : null,
+        working_hours,
         overtime_hours,
         status,
         source,
@@ -254,127 +305,114 @@ function makeAttendance(): AttendanceRecord[] {
 
 export const MOCK_ATTENDANCE: AttendanceRecord[] = makeAttendance()
 
-// --- Work packages (12 across varied statuses, categories, progress) ---
+// ---------------------------------------------------------------------------
+// Work packages (unchanged)
+// ---------------------------------------------------------------------------
 export const MOCK_WORK_PACKAGES: WorkPackage[] = [
   {
     id: 'wp-001', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-001',
     category: 'Labour', subcategory: 'Protection', sub_subcategory: null,
-    work_nature: 'Site Preliminary Work',
-    remark: 'Hoarding and fencing',
-    budget_amount: 85000, physical_progress: 100,
-    status: 'completed', created_at: '2024-10-20T08:00:00Z',
+    work_nature: 'Site Preliminary Work', remark: 'Hoarding and fencing',
+    budget_amount: 85000, physical_progress: 100, status: 'completed',
+    created_at: '2024-10-20T08:00:00Z',
   },
   {
     id: 'wp-002', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-002',
     category: 'Labour', subcategory: 'Safety Health & Environment', sub_subcategory: null,
-    work_nature: 'Work On Behalf',
-    remark: 'Safety officer deployment',
-    budget_amount: 42000, physical_progress: 87,
-    status: 'on_going', created_at: '2024-10-22T08:00:00Z',
+    work_nature: 'Work On Behalf', remark: 'Safety officer deployment',
+    budget_amount: 42000, physical_progress: 87, status: 'on_going',
+    created_at: '2024-10-22T08:00:00Z',
   },
   {
     id: 'wp-003', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-003',
     category: 'Labour', subcategory: 'Structural', sub_subcategory: null,
-    work_nature: 'Reinforced Concrete Works',
-    remark: 'Basement slab pours',
-    budget_amount: 310000, physical_progress: 62,
-    status: 'on_going', created_at: '2024-11-01T08:00:00Z',
+    work_nature: 'Reinforced Concrete Works', remark: 'Basement slab pours',
+    budget_amount: 310000, physical_progress: 62, status: 'on_going',
+    created_at: '2024-11-01T08:00:00Z',
   },
   {
     id: 'wp-004', project_id: PROJECT_ID,
     package_code: 'KSK/BKT2SA/004',
     category: 'Labour', subcategory: 'Finishing', sub_subcategory: null,
-    work_nature: 'Plastering Works',
-    remark: null,
-    budget_amount: 95000, physical_progress: 38,
-    status: 'in_review', created_at: '2024-11-10T08:00:00Z',
+    work_nature: 'Plastering Works', remark: null,
+    budget_amount: 95000, physical_progress: 38, status: 'in_review',
+    created_at: '2024-11-10T08:00:00Z',
   },
   {
     id: 'wp-005', project_id: PROJECT_ID,
     package_code: 'KSK/BKT2SA/005',
     category: 'Preliminary', subcategory: 'Earthworks', sub_subcategory: null,
-    work_nature: 'Excavation & Backfill',
-    remark: 'Phase 1 excavation complete',
-    budget_amount: 220000, physical_progress: 100,
-    status: 'completed', created_at: '2024-10-15T08:00:00Z',
+    work_nature: 'Excavation & Backfill', remark: 'Phase 1 excavation complete',
+    budget_amount: 220000, physical_progress: 100, status: 'completed',
+    created_at: '2024-10-15T08:00:00Z',
   },
   {
     id: 'wp-006', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-006',
     category: 'Labour', subcategory: 'M&E', sub_subcategory: 'Electrical',
-    work_nature: 'Main Electrical Distribution',
-    remark: null,
-    budget_amount: 175000, physical_progress: 45,
-    status: 'on_going', created_at: '2024-11-15T08:00:00Z',
+    work_nature: 'Main Electrical Distribution', remark: null,
+    budget_amount: 175000, physical_progress: 45, status: 'on_going',
+    created_at: '2024-11-15T08:00:00Z',
   },
   {
     id: 'wp-007', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-007',
     category: 'Preliminary', subcategory: 'Protection', sub_subcategory: null,
-    work_nature: 'Temporary Road Works',
-    remark: 'Rejected — scope changed',
-    budget_amount: 38000, physical_progress: 15,
-    status: 'rejected_archived', created_at: '2024-11-05T08:00:00Z',
+    work_nature: 'Temporary Road Works', remark: 'Rejected — scope changed',
+    budget_amount: 38000, physical_progress: 15, status: 'rejected_archived',
+    created_at: '2024-11-05T08:00:00Z',
   },
   {
     id: 'wp-008', project_id: PROJECT_ID,
     package_code: 'KSK/BKT2SA/008',
     category: 'Labour', subcategory: 'Structural', sub_subcategory: null,
-    work_nature: 'Formwork Installation',
-    remark: null,
-    budget_amount: 140000, physical_progress: 71,
-    status: 'on_going', created_at: '2024-11-20T08:00:00Z',
+    work_nature: 'Formwork Installation', remark: null,
+    budget_amount: 140000, physical_progress: 71, status: 'on_going',
+    created_at: '2024-11-20T08:00:00Z',
   },
   {
     id: 'wp-009', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-009',
     category: 'Labour', subcategory: 'Plumbing', sub_subcategory: null,
-    work_nature: 'Internal Plumbing Rough-in',
-    remark: null,
-    budget_amount: 88000, physical_progress: 28,
-    status: 'in_review', created_at: '2024-12-01T08:00:00Z',
+    work_nature: 'Internal Plumbing Rough-in', remark: null,
+    budget_amount: 88000, physical_progress: 28, status: 'in_review',
+    created_at: '2024-12-01T08:00:00Z',
   },
   {
     id: 'wp-010', project_id: PROJECT_ID,
     package_code: 'KSK/BKT2SA/010',
     category: 'Preliminary', subcategory: 'Safety Health & Environment', sub_subcategory: null,
-    work_nature: 'Site Hoarding Extension',
-    remark: 'North perimeter extension',
-    budget_amount: 22000, physical_progress: 100,
-    status: 'completed', created_at: '2024-11-25T08:00:00Z',
+    work_nature: 'Site Hoarding Extension', remark: 'North perimeter extension',
+    budget_amount: 22000, physical_progress: 100, status: 'completed',
+    created_at: '2024-11-25T08:00:00Z',
   },
   {
     id: 'wp-011', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-011',
     category: 'Labour', subcategory: 'Finishing', sub_subcategory: null,
-    work_nature: 'Tiling Works',
-    remark: null,
-    budget_amount: 115000, physical_progress: 5,
-    status: 'on_going', created_at: '2025-01-10T08:00:00Z',
+    work_nature: 'Tiling Works', remark: null,
+    budget_amount: 115000, physical_progress: 5, status: 'on_going',
+    created_at: '2025-01-10T08:00:00Z',
   },
   {
     id: 'wp-012', project_id: PROJECT_ID,
     package_code: 'KSK/BKT2SA/012',
     category: 'Labour', subcategory: 'Structural', sub_subcategory: null,
-    work_nature: 'Steel Frame Erection',
-    remark: 'Rejected — subcon withdrawn',
-    budget_amount: 290000, physical_progress: 0,
-    status: 'rejected_archived', created_at: '2024-12-15T08:00:00Z',
+    work_nature: 'Steel Frame Erection', remark: 'Rejected — subcon withdrawn',
+    budget_amount: 290000, physical_progress: 0, status: 'rejected_archived',
+    created_at: '2024-12-15T08:00:00Z',
   },
 ]
 
 // ---------------------------------------------------------------------------
-// Selector / aggregator functions — the ONLY public API for page components
+// Helpers shared by selectors
 // ---------------------------------------------------------------------------
-
 const TODAY_STR = isoDate(REF_DATE)
 
-/** Returns the most recent working day's attendance for "today" stats */
 function getLatestWorkday(): string {
-  // Walk back from REF_DATE to find a weekday
   for (let offset = 0; offset < 7; offset++) {
     const d = new Date(REF_DATE)
     d.setDate(REF_DATE.getDate() - offset)
@@ -382,49 +420,54 @@ function getLatestWorkday(): string {
   }
   return TODAY_STR
 }
-
 const LATEST_WORKDAY = getLatestWorkday()
 
-// --- KPI selectors ---
+// Cut-off date for the daily trend window (last 30 calendar days)
+const DAILY_CUTOFF = (() => {
+  const d = new Date(REF_DATE)
+  d.setDate(d.getDate() - 30)
+  return isoDate(d)
+})()
 
+// ---------------------------------------------------------------------------
+// Selector: Workforce KPIs
+// ---------------------------------------------------------------------------
 export interface WorkforceKPIs {
   totalWorkers: number
   activeToday: number
-  attendanceRate: number    // 0-100
-  absenteeismRate: number   // 0-100
+  attendanceRate: number
+  absenteeismRate: number
   overtimeHours: number
 }
 
 export function getWorkforceKPIs(_projectId: string): WorkforceKPIs {
-  const todayRecords = MOCK_ATTENDANCE.filter(a => a.date === LATEST_WORKDAY)
-  const present = todayRecords.filter(a => a.status !== 'absent').length
-  const absent = todayRecords.filter(a => a.status === 'absent').length
-  const total = todayRecords.length || MOCK_WORKERS.length
+  const todayRecs = MOCK_ATTENDANCE.filter(a => a.date === LATEST_WORKDAY)
+  const present   = todayRecs.filter(a => a.status !== 'absent').length
+  const absent    = todayRecs.filter(a => a.status === 'absent').length
+  const total     = todayRecs.length || MOCK_WORKERS.length
 
-  const recentRecords = MOCK_ATTENDANCE.filter(a => {
-    const d = new Date(a.date)
-    const cutoff = new Date(REF_DATE)
-    cutoff.setDate(cutoff.getDate() - 7)
-    return d >= cutoff
-  })
-  const totalOT = recentRecords.reduce((s, a) => s + a.overtime_hours, 0)
+  const cutoff7d  = isoDate(new Date(REF_DATE.getTime() - 7 * 86400000))
+  const totalOT   = MOCK_ATTENDANCE
+    .filter(a => a.date >= cutoff7d)
+    .reduce((s, a) => s + a.overtime_hours, 0)
 
   return {
-    totalWorkers: MOCK_WORKERS.length,
-    activeToday: present,
-    attendanceRate: total > 0 ? Math.round((present / total) * 1000) / 10 : 0,
-    absenteeismRate: total > 0 ? Math.round((absent / total) * 1000) / 10 : 0,
-    overtimeHours: Math.round(totalOT * 10) / 10,
+    totalWorkers:    MOCK_WORKERS.length,
+    activeToday:     present,
+    attendanceRate:  total > 0 ? Math.round((present / total) * 1000) / 10 : 0,
+    absenteeismRate: total > 0 ? Math.round((absent  / total) * 1000) / 10 : 0,
+    overtimeHours:   Math.round(totalOT * 10) / 10,
   }
 }
 
-// --- Headcount by worker type ---
-
+// ---------------------------------------------------------------------------
+// Selector: Headcount by worker type
+// ---------------------------------------------------------------------------
 export interface HeadcountDataPoint {
   workerType: WorkerType
   label: string
   headcount: number
-  workingHours: number   // avg daily working hours for this type
+  workingHours: number
 }
 
 const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
@@ -437,63 +480,57 @@ const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
 
 export function getHeadcountByWorkerType(_projectId: string): HeadcountDataPoint[] {
   const types: WorkerType[] = ['general_worker', 'subcon', 'subcon_as_gw', 'operator', 'staff']
-  return types.map(type => {
-    const workers = MOCK_WORKERS.filter(w => w.worker_type === type)
-    const workerIds = new Set(workers.map(w => w.id))
-    const recent = MOCK_ATTENDANCE.filter(
-      a => workerIds.has(a.worker_id) && a.date >= isoDate(new Date(REF_DATE.getTime() - 7 * 86400000))
-    )
-    const presentRecords = recent.filter(a => a.working_hours !== null)
-    const avgHours = presentRecords.length > 0
-      ? presentRecords.reduce((s, a) => s + (a.working_hours ?? 0), 0) / presentRecords.length
-      : 0
+  const cutoff7d = isoDate(new Date(REF_DATE.getTime() - 7 * 86400000))
 
+  return types.map(type => {
+    const workers    = MOCK_WORKERS.filter(w => w.worker_type === type)
+    const workerIds  = new Set(workers.map(w => w.id))
+    const recent     = MOCK_ATTENDANCE.filter(a => workerIds.has(a.worker_id) && a.date >= cutoff7d)
+    const withHours  = recent.filter(a => a.working_hours !== null)
+    const avgHours   = withHours.length > 0
+      ? withHours.reduce((s, a) => s + (a.working_hours ?? 0), 0) / withHours.length
+      : 0
     return {
-      workerType: type,
-      label: WORKER_TYPE_LABELS[type],
-      headcount: workers.length,
+      workerType:   type,
+      label:        WORKER_TYPE_LABELS[type],
+      headcount:    workers.length,
       workingHours: Math.round(avgHours * 10) / 10,
     }
   })
 }
 
-// --- Today's attendance ---
-
+// ---------------------------------------------------------------------------
+// Selector: Today's attendance
+// ---------------------------------------------------------------------------
 export interface TodaysAttendance {
   present: number
   absent: number
   late: number
   earlyLeave: number
   total: number
-  rate: number    // present (including late/early_leave) / total
+  rate: number
   periodStatus: PeriodStatus
 }
 
 export function getTodaysAttendance(_projectId: string): TodaysAttendance {
-  const records = MOCK_ATTENDANCE.filter(a => a.date === LATEST_WORKDAY)
-  const present = records.filter(a => a.status === 'present').length
-  const absent = records.filter(a => a.status === 'absent').length
-  const late = records.filter(a => a.status === 'late').length
-  const earlyLeave = records.filter(a => a.status === 'early_leave').length
-  const total = records.length
+  const recs      = MOCK_ATTENDANCE.filter(a => a.date === LATEST_WORKDAY)
+  const present   = recs.filter(a => a.status === 'present').length
+  const absent    = recs.filter(a => a.status === 'absent').length
+  const late      = recs.filter(a => a.status === 'late').length
+  const earlyLeave = recs.filter(a => a.status === 'early_leave').length
+  const total     = recs.length
   const attending = present + late + earlyLeave
 
-  // Today is in processing period
-  const periodStatus: PeriodStatus = records[0]?.period_status ?? 'processing'
-
   return {
-    present,
-    absent,
-    late,
-    earlyLeave,
-    total,
-    rate: total > 0 ? Math.round((attending / total) * 1000) / 10 : 0,
-    periodStatus,
+    present, absent, late, earlyLeave, total,
+    rate:         total > 0 ? Math.round((attending / total) * 1000) / 10 : 0,
+    periodStatus: recs[0]?.period_status ?? 'processing',
   }
 }
 
-// --- Trend data ---
-
+// ---------------------------------------------------------------------------
+// Trend helpers
+// ---------------------------------------------------------------------------
 export type Granularity = 'daily' | 'weekly' | 'monthly'
 
 export interface TrendPoint {
@@ -501,54 +538,73 @@ export interface TrendPoint {
   value: number
 }
 
-function bucketAttendance(granularity: Granularity): Map<string, AttendanceRecord[]> {
-  const bucket = new Map<string, AttendanceRecord[]>()
-
-  for (const rec of MOCK_ATTENDANCE) {
-    const d = new Date(rec.date)
-    let key: string
-    if (granularity === 'daily') {
-      key = rec.date
-    } else if (granularity === 'weekly') {
-      // ISO week: Monday-based
-      const dow = d.getDay() === 0 ? 7 : d.getDay()
-      const monday = new Date(d)
-      monday.setDate(d.getDate() - (dow - 1))
-      key = `Wk ${isoDate(monday).slice(5)}`  // "Wk MM-DD"
-    } else {
-      key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    }
-    if (!bucket.has(key)) bucket.set(key, [])
-    bucket.get(key)!.push(rec)
+function bucketKey(rec: AttendanceRecord, granularity: Granularity): string {
+  const d = new Date(rec.date)
+  if (granularity === 'daily') return rec.date
+  if (granularity === 'weekly') {
+    // Monday-based ISO week start
+    const dow    = d.getDay() === 0 ? 7 : d.getDay()
+    const monday = new Date(d)
+    monday.setDate(d.getDate() - (dow - 1))
+    return isoDate(monday)           // raw "YYYY-MM-DD" used as stable sort key
   }
-  return bucket
+  // monthly
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
+
+const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 function formatLabel(key: string, granularity: Granularity): string {
   if (granularity === 'daily') {
-    // "Aug 01"
-    const d = new Date(key)
-    return d.toLocaleDateString('en-MY', { month: 'short', day: '2-digit' })
+    const d = new Date(key + 'T00:00:00')  // force local parse
+    return `${DAY_ABBR[d.getDay()]} ${String(d.getDate()).padStart(2, '0')}`
   }
-  if (granularity === 'weekly') return key    // already "Wk MM-DD"
-  // monthly "YYYY-MM" → "Aug '25"
+  if (granularity === 'weekly') {
+    // key is "YYYY-MM-DD" of Monday — format as "17 Feb"
+    const d = new Date(key + 'T00:00:00')
+    return d.toLocaleDateString('en-MY', { day: 'numeric', month: 'short' })
+  }
+  // monthly: "YYYY-MM" → "Feb '25"
   const [y, m] = key.split('-')
   const d = new Date(Number(y), Number(m) - 1)
   return d.toLocaleDateString('en-MY', { month: 'short', year: '2-digit' })
 }
 
+/** Group attendance records into sorted buckets for the given granularity.
+ *  Daily view is windowed to the last 30 calendar days to keep the axis readable;
+ *  weekly and monthly use the full 180-day history. */
+function buildBuckets(granularity: Granularity): Map<string, AttendanceRecord[]> {
+  const bucket = new Map<string, AttendanceRecord[]>()
+
+  for (const rec of MOCK_ATTENDANCE) {
+    // Window: daily → last 30 days only
+    if (granularity === 'daily' && rec.date < DAILY_CUTOFF) continue
+
+    const key = bucketKey(rec, granularity)
+    if (!bucket.has(key)) bucket.set(key, [])
+    bucket.get(key)!.push(rec)
+  }
+
+  // Return in chronological order (Map preserves insertion; records are oldest-first)
+  return bucket
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Attendance trend (rate % per bucket)
+// ---------------------------------------------------------------------------
 export function getAttendanceTrend(_projectId: string, granularity: Granularity): TrendPoint[] {
-  const bucket = bucketAttendance(granularity)
-  return [...bucket.entries()].map(([key, recs]) => {
-    const total = recs.length
+  return [...buildBuckets(granularity).entries()].map(([key, recs]) => {
     const present = recs.filter(r => r.status !== 'absent').length
-    return { label: formatLabel(key, granularity), value: total > 0 ? Math.round((present / total) * 1000) / 10 : 0 }
+    const rate    = recs.length > 0 ? Math.round((present / recs.length) * 1000) / 10 : 0
+    return { label: formatLabel(key, granularity), value: rate }
   })
 }
 
+// ---------------------------------------------------------------------------
+// Selector: Working hours trend (avg hours per bucket)
+// ---------------------------------------------------------------------------
 export function getWorkingHoursTrend(_projectId: string, granularity: Granularity): TrendPoint[] {
-  const bucket = bucketAttendance(granularity)
-  return [...bucket.entries()].map(([key, recs]) => {
+  return [...buildBuckets(granularity).entries()].map(([key, recs]) => {
     const withHours = recs.filter(r => r.working_hours !== null)
     const avg = withHours.length > 0
       ? withHours.reduce((s, r) => s + (r.working_hours ?? 0), 0) / withHours.length
@@ -557,21 +613,123 @@ export function getWorkingHoursTrend(_projectId: string, granularity: Granularit
   })
 }
 
+// ---------------------------------------------------------------------------
+// Selector: Overtime trend (total OT hours per bucket)
+// ---------------------------------------------------------------------------
 export function getOvertimeTrend(_projectId: string, granularity: Granularity): TrendPoint[] {
-  const bucket = bucketAttendance(granularity)
-  return [...bucket.entries()].map(([key, recs]) => {
+  return [...buildBuckets(granularity).entries()].map(([key, recs]) => {
     const total = recs.reduce((s, r) => s + r.overtime_hours, 0)
     return { label: formatLabel(key, granularity), value: Math.round(total * 10) / 10 }
   })
 }
 
+// ---------------------------------------------------------------------------
+// Selector: Manpower trend (avg unique workers PRESENT per day in each bucket)
+// Using per-day unique count then averaging avoids the "count who appeared at
+// least once this week" inflated number that the naive Set approach gives.
+// ---------------------------------------------------------------------------
 export function getManpowerTrend(_projectId: string, granularity: Granularity): TrendPoint[] {
-  const bucket = bucketAttendance(granularity)
-  return [...bucket.entries()].map(([key, recs]) => {
-    // Unique workers present that day/week/month
-    const uniquePresent = new Set(
-      recs.filter(r => r.status !== 'absent').map(r => r.worker_id)
-    ).size
-    return { label: formatLabel(key, granularity), value: uniquePresent }
+  return [...buildBuckets(granularity).entries()].map(([key, recs]) => {
+    // Group by date within this bucket
+    const byDay = new Map<string, Set<string>>()
+    for (const r of recs) {
+      if (r.status === 'absent') continue
+      if (!byDay.has(r.date)) byDay.set(r.date, new Set())
+      byDay.get(r.date)!.add(r.worker_id)
+    }
+    const avgPresent = byDay.size > 0
+      ? [...byDay.values()].reduce((s, s2) => s + s2.size, 0) / byDay.size
+      : 0
+    return { label: formatLabel(key, granularity), value: Math.round(avgPresent) }
   })
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Attendance by worker type (for the latest workday)
+// ---------------------------------------------------------------------------
+export interface AttendanceByTypeRow {
+  workerType: WorkerType
+  label: string
+  total: number
+  present: number
+  late: number
+  earlyLeave: number
+  absent: number
+  rate: number
+  avgHours: number
+}
+
+export function getAttendanceByWorkerType(_projectId: string): AttendanceByTypeRow[] {
+  const types: WorkerType[] = ['general_worker', 'subcon', 'subcon_as_gw', 'operator', 'staff']
+  const recs = MOCK_ATTENDANCE.filter(a => a.date === LATEST_WORKDAY)
+  const workerMap = new Map(MOCK_WORKERS.map(w => [w.id, w]))
+
+  return types.map(type => {
+    const typeRecs = recs.filter(r => workerMap.get(r.worker_id)?.worker_type === type)
+    const present    = typeRecs.filter(r => r.status === 'present').length
+    const late       = typeRecs.filter(r => r.status === 'late').length
+    const earlyLeave = typeRecs.filter(r => r.status === 'early_leave').length
+    const absent     = typeRecs.filter(r => r.status === 'absent').length
+    const attending  = present + late + earlyLeave
+    const withHours  = typeRecs.filter(r => r.working_hours !== null)
+    const avgHours   = withHours.length > 0
+      ? withHours.reduce((s, r) => s + (r.working_hours ?? 0), 0) / withHours.length
+      : 0
+    return {
+      workerType: type,
+      label: WORKER_TYPE_LABELS[type],
+      total: typeRecs.length,
+      present, late, earlyLeave, absent,
+      rate: typeRecs.length > 0 ? Math.round((attending / typeRecs.length) * 1000) / 10 : 0,
+      avgHours: Math.round(avgHours * 10) / 10,
+    }
+  }).filter(r => r.total > 0)
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Per-worker daily attendance records (joined with worker info)
+// ---------------------------------------------------------------------------
+export interface DailyWorkerRecord {
+  workerId: string
+  name: string
+  workerType: WorkerType
+  company: string | null
+  tradeCategory: string | null
+  status: AttendanceStatus
+  source: AttendanceSource
+  checkIn: string | null
+  checkOut: string | null
+  workingHours: number | null
+  overtimeHours: number
+  periodType: PeriodType
+  periodStatus: PeriodStatus
+}
+
+export function getDailyWorkerRecords(_projectId: string, date?: string): DailyWorkerRecord[] {
+  const targetDate = date ?? LATEST_WORKDAY
+  const recs = MOCK_ATTENDANCE.filter(a => a.date === targetDate)
+  const workerMap = new Map(MOCK_WORKERS.map(w => [w.id, w]))
+
+  return recs
+    .map(r => {
+      const w = workerMap.get(r.worker_id)
+      if (!w) return null
+      return {
+        workerId:     w.id,
+        name:         w.name,
+        workerType:   w.worker_type,
+        company:      w.company,
+        tradeCategory: w.trade_category,
+        status:       r.status,
+        source:       r.source,
+        checkIn:      r.check_in,
+        checkOut:     r.check_out,
+        workingHours: r.working_hours,
+        overtimeHours: r.overtime_hours,
+        periodType:   r.period_type,
+        periodStatus: r.period_status,
+      } satisfies DailyWorkerRecord
+    })
+    .filter((r): r is DailyWorkerRecord => r !== null)
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
