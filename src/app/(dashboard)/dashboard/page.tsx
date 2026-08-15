@@ -137,15 +137,44 @@ function TooltipShell({ label, children }: { label?: string; children: React.Rea
 
 // ---------------------------------------------------------------------------
 // Headcount + Working Hours combo chart (Recharts ComposedChart)
-// Bars = headcount (amber, left axis)
-// Line = avg working hours (positive/green, right axis) with value labels
+// Bars = headcount (blue, left axis)
+// Line = avg working hours (mint green, right axis) with pill badge labels
 // ---------------------------------------------------------------------------
+const C_BAR_BLUE  = '#4B7AE8'
+const C_MINT      = '#10C98F'
+
 type HeadcountDatum = { name: string; Headcount: number; workingHours: number }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function HoursBadge(props: any) {
+  const x = props.x as number | undefined
+  const y = props.y as number | undefined
+  const value = typeof props.value === 'number' ? props.value as number : undefined
+  if (x == null || y == null || value == null) return null
+  const text = `${value}h`
+  const w = Math.max(36, text.length * 7.5 + 16)
+  const h = 22
+  return (
+    <g transform={`translate(${x},${y - h - 8})`}>
+      <rect x={-w / 2} y={0} width={w} height={h} rx={6} fill={C_MINT} />
+      <text
+        x={0} y={h / 2 + 4.5}
+        textAnchor="middle"
+        fill="#fff"
+        fontSize={11}
+        fontWeight={700}
+        fontFamily="inherit"
+      >
+        {text}
+      </text>
+    </g>
+  )
+}
 
 function HeadcountComboChart({ data }: { data: HeadcountDatum[] }) {
   return (
-    <ResponsiveContainer width="100%" height={224}>
-      <ComposedChart data={data} margin={{ top: 28, right: 48, left: -12, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={240}>
+      <ComposedChart data={data} margin={{ top: 40, right: 48, left: -12, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={C_BORDER} vertical={false} />
 
         <XAxis
@@ -166,7 +195,7 @@ function HeadcountComboChart({ data }: { data: HeadcountDatum[] }) {
           allowDecimals={false}
         />
 
-        {/* Right axis: avg hours, fixed domain so line sits mid-chart */}
+        {/* Right axis: avg hours */}
         <YAxis
           yAxisId="hrs"
           orientation="right"
@@ -188,12 +217,12 @@ function HeadcountComboChart({ data }: { data: HeadcountDatum[] }) {
             return (
               <TooltipShell label={String(label)}>
                 {hc && (
-                  <p style={{ color: C_ACCENT, fontSize: 12, fontWeight: 600 }}>
+                  <p style={{ color: C_BAR_BLUE, fontSize: 12, fontWeight: 600 }}>
                     Headcount: {hc.value}
                   </p>
                 )}
                 {hrs && (
-                  <p style={{ color: C_POSITIVE, fontSize: 12, fontWeight: 600 }}>
+                  <p style={{ color: C_MINT, fontSize: 12, fontWeight: 600 }}>
                     Avg hours: {hrs.value}h
                   </p>
                 )}
@@ -205,8 +234,8 @@ function HeadcountComboChart({ data }: { data: HeadcountDatum[] }) {
         <Bar
           yAxisId="hc"
           dataKey="Headcount"
-          fill={C_ACCENT}
-          radius={[5, 5, 0, 0]}
+          fill={C_BAR_BLUE}
+          radius={[6, 6, 0, 0]}
           maxBarSize={54}
         />
 
@@ -215,22 +244,12 @@ function HeadcountComboChart({ data }: { data: HeadcountDatum[] }) {
           type="monotone"
           dataKey="workingHours"
           name="Avg Hours"
-          stroke={C_POSITIVE}
+          stroke={C_MINT}
           strokeWidth={2.5}
-          dot={{ r: 6, fill: C_POSITIVE, stroke: C_SURFACE, strokeWidth: 2 }}
-          activeDot={{ r: 8, fill: C_POSITIVE, stroke: C_SURFACE, strokeWidth: 2 }}
+          dot={{ r: 6, fill: C_MINT, stroke: C_SURFACE, strokeWidth: 2 }}
+          activeDot={{ r: 8, fill: C_MINT, stroke: C_SURFACE, strokeWidth: 2 }}
         >
-          <LabelList
-            dataKey="workingHours"
-            position="top"
-            style={{
-              fill: C_POSITIVE,
-              fontSize: 11,
-              fontWeight: 700,
-              fontFamily: 'var(--font-ibm-plex-mono, monospace)',
-            }}
-            formatter={(v: number) => `${v}h`}
-          />
+          <LabelList dataKey="workingHours" content={HoursBadge} />
         </Line>
       </ComposedChart>
     </ResponsiveContainer>
@@ -408,12 +427,12 @@ export default function DashboardPage() {
         >
           <div className="flex items-center gap-4 mb-3 text-xs text-[var(--color-ink-muted)]">
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-sm inline-block" style={{ background: C_ACCENT }} />
+              <span className="w-3 h-3 rounded-sm inline-block" style={{ background: C_BAR_BLUE }} />
               Headcount (left axis)
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-3 h-0.5 inline-block" style={{ background: C_POSITIVE }} />
-              <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: C_POSITIVE }} />
+              <span className="w-3 h-0.5 inline-block" style={{ background: C_MINT }} />
+              <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: C_MINT }} />
               Avg daily hours (right axis)
             </span>
           </div>
