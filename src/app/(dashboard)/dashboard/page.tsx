@@ -1,7 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { BarChart, DonutChart, AreaChart } from '@tremor/react'
+import {
+  ComposedChart,
+  Bar,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartTooltip,
+  ResponsiveContainer,
+  LabelList,
+  AreaChart as RechartAreaChart,
+  Area,
+} from 'recharts'
+import { DonutChart } from '@tremor/react'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { ChartCard } from '@/components/dashboard/ChartCard'
 import { StatusBadge } from '@/components/dashboard/StatusBadge'
@@ -19,8 +32,19 @@ import {
   type WorkerType,
 } from '@/lib/mock-data'
 
-// Design-system chart colors — accent, positive, pending, alert, muted (no blue)
-const CHART_COLORS = ['#D97706', '#3F6B4A', '#B8862E', '#B3432E', '#6B6358'] as const
+// ---------------------------------------------------------------------------
+// Design token hex values — used directly in Recharts SVG props
+// ---------------------------------------------------------------------------
+const C_ACCENT   = '#D97706'
+const C_POSITIVE = '#3F6B4A'
+const C_PENDING  = '#B8862E'
+const C_ALERT    = '#B3432E'
+const C_MUTED    = '#6B6358'
+const C_BORDER   = '#E7E0D4'
+const C_SURFACE  = '#FFFFFF'
+const C_INK      = '#211D18'
+
+const AXIS_STYLE = { fill: C_MUTED, fontSize: 11, fontFamily: 'inherit' }
 
 const PROJECT_ID = MOCK_PROJECT.id
 
@@ -29,13 +53,15 @@ const TODAY_FORMATTED = TODAY.toLocaleDateString('en-MY', {
   weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
 })
 
-// Worker type filter options for the headcount chart
+// ---------------------------------------------------------------------------
+// Segmented control
+// ---------------------------------------------------------------------------
 const WORKER_TYPE_OPTIONS: { value: WorkerType | 'all'; label: string }[] = [
-  { value: 'all',           label: 'All Types' },
-  { value: 'general_worker',label: 'General Worker' },
-  { value: 'subcon',        label: 'Subcon' },
-  { value: 'subcon_as_gw',  label: 'Subcon As GW' },
-  { value: 'operator',      label: 'Operator' },
+  { value: 'all',           label: 'All' },
+  { value: 'general_worker',label: 'GW' },
+  { value: 'subcon',        label: 'SC' },
+  { value: 'subcon_as_gw',  label: 'SAG' },
+  { value: 'operator',      label: 'OP' },
   { value: 'staff',         label: 'Staff' },
 ]
 
@@ -45,9 +71,6 @@ const GRANULARITY_OPTIONS: { value: Granularity; label: string }[] = [
   { value: 'monthly', label: 'Monthly' },
 ]
 
-// ---------------------------------------------------------------------------
-// Segmented control (shared between granularity toggle and worker-type tabs)
-// ---------------------------------------------------------------------------
 function SegmentedControl<T extends string>({
   options,
   value,
@@ -90,15 +113,221 @@ function SegmentedControl<T extends string>({
 }
 
 // ---------------------------------------------------------------------------
+// Shared tooltip shell — styled to design system
+// ---------------------------------------------------------------------------
+function TooltipShell({ label, children }: { label?: string; children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        background: C_SURFACE,
+        border: `1px solid ${C_BORDER}`,
+        borderRadius: 10,
+        boxShadow: '0 2px 4px rgba(33,29,24,0.08),0 8px 24px rgba(33,29,24,0.06)',
+        padding: '8px 12px',
+        minWidth: 110,
+      }}
+    >
+      {label && (
+        <p style={{ color: C_MUTED, fontSize: 11, marginBottom: 4 }}>{label}</p>
+      )}
+      {children}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Headcount + Working Hours combo chart (Recharts ComposedChart)
+// Bars = headcount (amber, left axis)
+// Line = avg working hours (positive/green, right axis) with value labels
+// ---------------------------------------------------------------------------
+type HeadcountDatum = { name: string; Headcount: number; workingHours: number }
+
+function HeadcountComboChart({ data }: { data: HeadcountDatum[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={224}>
+      <ComposedChart data={data} margin={{ top: 28, right: 48, left: -12, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={C_BORDER} vertical={false} />
+
+        <XAxis
+          dataKey="name"
+          tick={AXIS_STYLE}
+          axisLine={{ stroke: C_BORDER }}
+          tickLine={false}
+        />
+
+        {/* Left axis: headcount */}
+        <YAxis
+          yAxisId="hc"
+          orientation="left"
+          tick={AXIS_STYLE}
+          axisLine={false}
+          tickLine={false}
+          width={32}
+          allowDecimals={false}
+        />
+
+        {/* Right axis: avg hours, fixed domain so line sits mid-chart */}
+        <YAxis
+          yAxisId="hrs"
+          orientation="right"
+          tick={AXIS_STYLE}
+          axisLine={false}
+          tickLine={false}
+          width={36}
+          domain={[0, 12]}
+          tickCount={4}
+          tickFormatter={(v: number) => `${v}h`}
+        />
+
+        <RechartTooltip
+          cursor={{ fill: 'rgba(231,224,212,0.35)' }}
+          content={({ active, payload, label }) => {
+            if (!active || !payload?.length) return null
+            const hc  = payload.find(p => p.dataKey === 'Headcount')
+            const hrs = payload.find(p => p.dataKey === 'workingHours')
+            return (
+              <TooltipShell label={String(label)}>
+                {hc && (
+                  <p style={{ color: C_ACCENT, fontSize: 12, fontWeight: 600 }}>
+                    Headcount: {hc.value}
+                  </p>
+                )}
+                {hrs && (
+                  <p style={{ color: C_POSITIVE, fontSize: 12, fontWeight: 600 }}>
+                    Avg hours: {hrs.value}h
+                  </p>
+                )}
+              </TooltipShell>
+            )
+          }}
+        />
+
+        <Bar
+          yAxisId="hc"
+          dataKey="Headcount"
+          fill={C_ACCENT}
+          radius={[5, 5, 0, 0]}
+          maxBarSize={54}
+        />
+
+        <Line
+          yAxisId="hrs"
+          type="monotone"
+          dataKey="workingHours"
+          name="Avg Hours"
+          stroke={C_POSITIVE}
+          strokeWidth={2.5}
+          dot={{ r: 6, fill: C_POSITIVE, stroke: C_SURFACE, strokeWidth: 2 }}
+          activeDot={{ r: 8, fill: C_POSITIVE, stroke: C_SURFACE, strokeWidth: 2 }}
+        >
+          <LabelList
+            dataKey="workingHours"
+            position="top"
+            style={{
+              fill: C_POSITIVE,
+              fontSize: 11,
+              fontWeight: 700,
+              fontFamily: 'var(--font-ibm-plex-mono, monospace)',
+            }}
+            formatter={(v: number) => `${v}h`}
+          />
+        </Line>
+      </ComposedChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Trend area chart — full Recharts control: monotone line, gradient fill, dots
+// ---------------------------------------------------------------------------
+interface TrendAreaChartProps {
+  data: Record<string, string | number>[]
+  dataKey: string
+  color: string
+  /** Gradient ID must be unique per chart on the page */
+  gradientId: string
+  unit?: string
+  tickInterval?: number | 'preserveStartEnd'
+}
+
+function TrendAreaChart({
+  data,
+  dataKey,
+  color,
+  gradientId,
+  unit = '',
+  tickInterval,
+}: TrendAreaChartProps) {
+  const autoInterval: number | 'preserveStartEnd' =
+    tickInterval ?? (data.length > 14 ? Math.ceil(data.length / 6) : 'preserveStartEnd')
+
+  return (
+    <ResponsiveContainer width="100%" height={176}>
+      <RechartAreaChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stopColor={color} stopOpacity={0.18} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+
+        <CartesianGrid strokeDasharray="3 3" stroke={C_BORDER} vertical={false} />
+
+        <XAxis
+          dataKey="date"
+          tick={AXIS_STYLE}
+          axisLine={{ stroke: C_BORDER }}
+          tickLine={false}
+          interval={autoInterval}
+          minTickGap={44}
+        />
+
+        <YAxis
+          tick={AXIS_STYLE}
+          axisLine={false}
+          tickLine={false}
+          width={40}
+        />
+
+        <RechartTooltip
+          cursor={{ stroke: color, strokeWidth: 1, strokeDasharray: '4 2' }}
+          content={({ active, payload, label }) => {
+            if (!active || !payload?.length) return null
+            return (
+              <TooltipShell label={String(label)}>
+                <p style={{ color, fontSize: 13, fontWeight: 600 }}>
+                  {payload[0].value}{unit}
+                </p>
+              </TooltipShell>
+            )
+          }}
+        />
+
+        <Area
+          type="monotone"
+          dataKey={dataKey}
+          stroke={color}
+          strokeWidth={2.5}
+          fill={`url(#${gradientId})`}
+          dot={{ r: 3, fill: color, stroke: C_SURFACE, strokeWidth: 1.5 }}
+          activeDot={{ r: 5, fill: color, stroke: C_SURFACE, strokeWidth: 2 }}
+          isAnimationActive={true}
+        />
+      </RechartAreaChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 export default function DashboardPage() {
   const [granularity, setGranularity] = useState<Granularity>('daily')
   const [workerTypeFilter, setWorkerTypeFilter] = useState<WorkerType | 'all'>('all')
 
-  // --- Data ---
-  const kpis = getWorkforceKPIs(PROJECT_ID)
-  const todayAtt = getTodaysAttendance(PROJECT_ID)
+  // Data
+  const kpis       = getWorkforceKPIs(PROJECT_ID)
+  const todayAtt   = getTodaysAttendance(PROJECT_ID)
   const headcountData = getHeadcountByWorkerType(PROJECT_ID)
 
   const filteredHeadcount =
@@ -106,38 +335,28 @@ export default function DashboardPage() {
       ? headcountData
       : headcountData.filter(d => d.workerType === workerTypeFilter)
 
-  const headcountChartData = filteredHeadcount.map(d => ({
+  const headcountChartData: HeadcountDatum[] = filteredHeadcount.map(d => ({
     name: d.label,
     Headcount: d.headcount,
+    workingHours: d.workingHours,
   }))
 
-  const attTrend = getAttendanceTrend(PROJECT_ID, granularity).map(p => ({
-    date: p.label,
-    'Attendance %': p.value,
-  }))
-  const hoursTrend = getWorkingHoursTrend(PROJECT_ID, granularity).map(p => ({
-    date: p.label,
-    'Avg Hours': p.value,
-  }))
-  const otTrend = getOvertimeTrend(PROJECT_ID, granularity).map(p => ({
-    date: p.label,
-    'OT Hours': p.value,
-  }))
-  const manpowerTrend = getManpowerTrend(PROJECT_ID, granularity).map(p => ({
-    date: p.label,
-    Workers: p.value,
-  }))
+  const attTrend      = getAttendanceTrend(PROJECT_ID, granularity).map(p => ({ date: p.label, 'Attendance %': p.value }))
+  const hoursTrend    = getWorkingHoursTrend(PROJECT_ID, granularity).map(p => ({ date: p.label, 'Avg Hours': p.value }))
+  const otTrend       = getOvertimeTrend(PROJECT_ID, granularity).map(p => ({ date: p.label, 'OT Hours': p.value }))
+  const manpowerTrend = getManpowerTrend(PROJECT_ID, granularity).map(p => ({ date: p.label, Workers: p.value }))
 
-  // Donut data: present = present + late + earlyLeave, absent = absent
+  // Donut: Tremor accepts named colors only — emerald = positive, rose = alert
   const attending = todayAtt.present + todayAtt.late + todayAtt.earlyLeave
   const donutData = [
     { name: 'Attending', value: attending },
-    { name: 'Absent', value: todayAtt.absent },
+    { name: 'Absent',    value: todayAtt.absent },
   ]
 
   return (
     <div className="space-y-6">
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div>
         <h1 className="font-display text-2xl font-semibold text-[var(--color-ink)]">
           Executive Dashboard
@@ -150,46 +369,19 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* ── KPI row ─────────────────────────────────────────────────────────── */}
+      {/* ── KPI row ────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <StatCard
-          label="Total Registered Workers"
-          value={kpis.totalWorkers}
-          sublabel="Across all worker types"
-        />
-        <StatCard
-          label="Active Workers Today"
-          value={kpis.activeToday}
-          sublabel={`Of ${kpis.totalWorkers} registered`}
-          delta={2.1}
-          deltaGoodDirection="up"
-        />
-        <StatCard
-          label="Attendance Rate"
-          value={`${kpis.attendanceRate}%`}
-          sublabel="Present + late + early leave"
-          delta={1.4}
-          deltaGoodDirection="up"
-        />
-        <StatCard
-          label="Absenteeism Rate"
-          value={`${kpis.absenteeismRate}%`}
-          sublabel="Absent / total headcount"
-          delta={-1.4}
-          deltaGoodDirection="down"
-        />
-        <StatCard
-          label="Overtime Hours (7d)"
-          value={kpis.overtimeHours}
-          sublabel="Last 7 working days"
-          delta={3.8}
-          deltaGoodDirection="up"
-        />
+        <StatCard label="Total Registered Workers" value={kpis.totalWorkers}     sublabel="Across all worker types" />
+        <StatCard label="Active Workers Today"      value={kpis.activeToday}      sublabel={`Of ${kpis.totalWorkers} registered`} delta={2.1}  deltaGoodDirection="up"   />
+        <StatCard label="Attendance Rate"           value={`${kpis.attendanceRate}%`}  sublabel="Present + late + early leave" delta={1.4}  deltaGoodDirection="up"   />
+        <StatCard label="Absenteeism Rate"          value={`${kpis.absenteeismRate}%`} sublabel="Absent / total headcount"     delta={-1.4} deltaGoodDirection="down" />
+        <StatCard label="Overtime Hours (7d)"       value={kpis.overtimeHours}    sublabel="Last 7 working days"  delta={3.8}  deltaGoodDirection="up"   />
       </div>
 
-      {/* ── Row 2: Headcount chart + Today's Attendance ─────────────────────── */}
+      {/* ── Row 2: Headcount combo + Today's Attendance ────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        {/* Headcount by Worker Type (~60%) */}
+
+        {/* Headcount by Worker Type — bar (headcount) + line (avg hours) */}
         <ChartCard
           className="lg:col-span-3"
           title="Headcount by Worker Type"
@@ -202,31 +394,23 @@ export default function DashboardPage() {
             />
           }
         >
-          <BarChart
-            data={headcountChartData}
-            index="name"
-            categories={['Headcount']}
-            colors={[CHART_COLORS[0]]}
-            yAxisWidth={40}
-            showLegend={false}
-            showAnimation={true}
-            className="h-56"
-          />
-          {/* Avg daily hours per type shown as a caption row */}
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-            {filteredHeadcount.map(d => (
-              <span key={d.workerType} className="text-xs text-[var(--color-ink-muted)]">
-                <span className="font-medium text-[var(--color-ink)]">{d.workingHours}h</span>
-                {' '}avg · {d.label}
-              </span>
-            ))}
+          <div className="flex items-center gap-4 mb-3 text-xs text-[var(--color-ink-muted)]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-sm inline-block" style={{ background: C_ACCENT }} />
+              Headcount (left axis)
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-0.5 inline-block" style={{ background: C_POSITIVE }} />
+              <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: C_POSITIVE }} />
+              Avg daily hours (right axis)
+            </span>
           </div>
+          <HeadcountComboChart data={headcountChartData} />
         </ChartCard>
 
-        {/* Today's Attendance (~40%) */}
+        {/* Today's Attendance donut */}
         <ChartCard className="lg:col-span-2" title="Today's Attendance">
           <div className="flex flex-col gap-4">
-            {/* Period status warning */}
             <div className="flex items-center gap-2">
               <StatusBadge status={todayAtt.periodStatus} />
               {todayAtt.periodStatus === 'processing' && (
@@ -236,19 +420,18 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Donut + stats */}
             <div className="flex items-center gap-6">
+              {/* Donut — emerald = positive (attending), rose = alert (absent) */}
               <div className="relative shrink-0">
                 <DonutChart
                   data={donutData}
                   category="value"
                   index="name"
-                  colors={[CHART_COLORS[1], CHART_COLORS[3]]}
+                  colors={['emerald', 'rose']}
                   showAnimation={true}
-                  className="h-36 w-36"
                   showLabel={false}
+                  className="h-36 w-36"
                 />
-                {/* Center label */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="font-display text-2xl font-semibold text-[var(--color-ink)] leading-none">
                     {todayAtt.rate}%
@@ -259,98 +442,64 @@ export default function DashboardPage() {
 
               {/* Breakdown */}
               <div className="flex flex-col gap-3 min-w-0">
-                <StatRow
-                  dot="positive"
-                  label="Present"
-                  value={todayAtt.present}
-                />
-                <StatRow
-                  dot="pending"
-                  label="Late"
-                  value={todayAtt.late}
-                />
-                <StatRow
-                  dot="pending"
-                  label="Early leave"
-                  value={todayAtt.earlyLeave}
-                />
-                <StatRow
-                  dot="alert"
-                  label="Absent"
-                  value={todayAtt.absent}
-                />
+                <StatRow dot="positive" label="Present"     value={todayAtt.present}    />
+                <StatRow dot="pending"  label="Late"        value={todayAtt.late}        />
+                <StatRow dot="pending"  label="Early leave" value={todayAtt.earlyLeave}  />
+                <StatRow dot="alert"    label="Absent"      value={todayAtt.absent}      />
               </div>
             </div>
           </div>
         </ChartCard>
       </div>
 
-      {/* ── Row 3: Trend section ─────────────────────────────────────────────── */}
+      {/* ── Row 3: Trend section ───────────────────────────────────────────── */}
       <div>
-        {/* Shared granularity toggle */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-xl font-semibold text-[var(--color-ink)]">
-            Trends
-          </h2>
-          <SegmentedControl
-            options={GRANULARITY_OPTIONS}
-            value={granularity}
-            onChange={setGranularity}
-          />
+          <h2 className="font-display text-xl font-semibold text-[var(--color-ink)]">Trends</h2>
+          <SegmentedControl options={GRANULARITY_OPTIONS} value={granularity} onChange={setGranularity} />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
           <ChartCard title="Attendance Trend">
-            <AreaChart
+            <TrendAreaChart
               data={attTrend}
-              index="date"
-              categories={['Attendance %']}
-              colors={[CHART_COLORS[1]]}
-              showAnimation={true}
-              showLegend={false}
-              yAxisWidth={44}
-              className="h-44"
+              dataKey="Attendance %"
+              color={C_POSITIVE}
+              gradientId="grad-att"
+              unit="%"
             />
           </ChartCard>
 
           <ChartCard title="Working Hours Trend">
-            <AreaChart
+            <TrendAreaChart
               data={hoursTrend}
-              index="date"
-              categories={['Avg Hours']}
-              colors={[CHART_COLORS[0]]}
-              showAnimation={true}
-              showLegend={false}
-              yAxisWidth={44}
-              className="h-44"
+              dataKey="Avg Hours"
+              color={C_ACCENT}
+              gradientId="grad-hours"
+              unit="h"
             />
           </ChartCard>
 
           <ChartCard title="Overtime Trend">
-            <AreaChart
+            <TrendAreaChart
               data={otTrend}
-              index="date"
-              categories={['OT Hours']}
-              colors={[CHART_COLORS[2]]}
-              showAnimation={true}
-              showLegend={false}
-              yAxisWidth={44}
-              className="h-44"
+              dataKey="OT Hours"
+              color={C_PENDING}
+              gradientId="grad-ot"
+              unit="h"
             />
           </ChartCard>
 
           <ChartCard title="Manpower Trend">
-            <AreaChart
+            <TrendAreaChart
               data={manpowerTrend}
-              index="date"
-              categories={['Workers']}
-              colors={[CHART_COLORS[3]]}
-              showAnimation={true}
-              showLegend={false}
-              yAxisWidth={44}
-              className="h-44"
+              dataKey="Workers"
+              color={C_ACCENT}
+              gradientId="grad-manpower"
             />
           </ChartCard>
+
         </div>
       </div>
     </div>
@@ -358,7 +507,7 @@ export default function DashboardPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Small helper used only in this file
+// StatRow helper (donut breakdown)
 // ---------------------------------------------------------------------------
 type DotColor = 'positive' | 'pending' | 'alert'
 
