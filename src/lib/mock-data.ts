@@ -572,7 +572,7 @@ export interface HeadcountDataPoint {
   workingHours: number
 }
 
-const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
+export const WORKER_TYPE_LABELS: Record<WorkerType, string> = {
   general_worker: 'General Worker',
   staff:          'Staff',
   subcon:         'Subcon',
@@ -1145,4 +1145,185 @@ export function getAttendanceSummary(
     totalBackchargePrev: prev.backcharge,
     employeesYetToSubmit,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Productivity scoring selectors
+// Computed from attendance records — no raw "productivity" table.
+// Score = attRate × punctuality × hoursScore × 100 (multiplicative: all
+// three components must be high to achieve a high score).
+// ---------------------------------------------------------------------------
+export type ProductivityBand = 'high' | 'normal' | 'attention'
+
+export interface WorkerProductivityScore {
+  workerId:      string
+  name:          string
+  workerType:    WorkerType
+  tradeCategory: string | null
+  score:         number           // 0–100 utilisation score
+  band:          ProductivityBand
+  trendDelta:    number           // score change vs previous 30-day window (positive = improved)
+}
+
+export interface ProductivityByTypeRow {
+  workerType: WorkerType
+  label:      string
+  avgScore:   number
+}
+
+export interface WPAttentionItem {
+  packageCode:    string
+  category:       string | null
+  subcategory:    string | null
+  attentionCount: number
+  totalAssigned:  number
+  pct:            number
+}
+
+function scoreBand(score: number): ProductivityBand {
+  if (score >= 90) return 'high'
+  if (score >= 70) return 'normal'
+  return 'attention'
+}
+
+// Expected daily hours for score normalisation.
+// Set at 9h to reflect actual site norms (operators, GW run long shifts).
+const EXPECTED_DAILY_HOURS = 9
+const PROD_WINDOW_DAYS     = 30
+
+// Current window: last 30 days.  Previous: 30–60 days ago.
+const PROD_CURRENT_END   = TODAY_STR
+const PROD_CURRENT_START = isoDate(new Date(REF_DATE.getTime() - PROD_WINDOW_DAYS * 86_400_000))
+const PROD_PREV_START    = isoDate(new Date(REF_DATE.getTime() - 2 * PROD_WINDOW_DAYS * 86_400_000))
+const PROD_PREV_END      = isoDate(
+  new Date(new Date(PROD_CURRENT_START + 'T00:00:00').getTime() - 86_400_000)
+)
+
+function computeScore(
+  workerRecs: AttendanceRecord[],
+  dateStart:  string,
+  dateEnd:    string,
+): number {
+  const inWindow = workerRecs.filter(r => r.date >= dateStart && r.date <= dateEnd)
+  // Only count Mon–Sat (Sundays are always absent; excluding them makes attRate meaningful)
+  const workday  = inWindow.filter(r => new Date(r.date + 'T00:00:00').getDay() !== 0)
+  if (workday.length === 0) return 0
+
+  const present     = workday.filter(r => r.status !== 'absent')
+  const attRate     = present.length / workday.length
+
+  const lateOrEarly = workday.filter(r => r.status === 'late' || r.status === 'early_leave').length
+  const punctuality = present.length > 0
+    ? 1 - (lateOrEarly / present.length) * 0.5
+    : 1
+
+  const withHours  = present.filter(r => r.working_hours !== null)
+  const avgHours   = withHours.length > 0
+    ? withHours.reduce((s, r) => s + (r.working_hours ?? 0), 0) / withHours.length
+    : 0
+  const hoursScore = Math.min(1, avgHours / EXPECTED_DAILY_HOURS)
+
+  return Math.round(attRate * punctuality * hoursScore * 100)
+}
+
+let _prodScoreCache: WorkerProductivityScore[] | null = null
+
+function buildProductivityScores(): WorkerProductivityScore[] {
+  if (_prodScoreCache) return _prodScoreCache
+
+  const byWorker = new Map<string, AttendanceRecord[]>()
+  for (const rec of MOCK_ATTENDANCE) {
+    if (!byWorker.has(rec.worker_id)) byWorker.set(rec.worker_id, [])
+    byWorker.get(rec.worker_id)!.push(rec)
+  }
+
+  _prodScoreCache = MOCK_WORKERS.map(w => {
+    const recs  = byWorker.get(w.id) ?? []
+    const score = computeScore(recs, PROD_CURRENT_START, PROD_CURRENT_END)
+    const prev  = computeScore(recs, PROD_PREV_START, PROD_PREV_END)
+    return {
+      workerId:      w.id,
+      name:          w.name,
+      workerType:    w.worker_type,
+      tradeCategory: w.trade_category,
+      score,
+      band:          scoreBand(score),
+      trendDelta:    score - prev,
+    }
+  })
+
+  return _prodScoreCache
+}
+
+export function getProductivityScores(_projectId: string): WorkerProductivityScore[] {
+  return buildProductivityScores()
+}
+
+export function getProductivityByWorkerType(_projectId: string): ProductivityByTypeRow[] {
+  const scores = buildProductivityScores()
+  const types: WorkerType[] = ['general_worker', 'subcon', 'subcon_as_gw', 'operator', 'staff']
+  return types.map(type => {
+    const group = scores.filter(s => s.workerType === type)
+    const avg   = group.length > 0
+      ? Math.round(group.reduce((s, r) => s + r.score, 0) / group.length)
+      : 0
+    return { workerType: type, label: WORKER_TYPE_LABELS[type], avgScore: avg }
+  })
+}
+
+export function getProductivityTrend(_projectId: string, granularity: Granularity): TrendPoint[] {
+  return [...buildBuckets(granularity).entries()].map(([key, recs]) => {
+    const workday = recs.filter(r => new Date(r.date + 'T00:00:00').getDay() !== 0)
+    if (workday.length === 0) return { label: formatLabel(key, granularity), value: 0 }
+
+    const present     = workday.filter(r => r.status !== 'absent')
+    const attRate     = present.length / workday.length
+    const lateOrEarly = workday.filter(r => r.status === 'late' || r.status === 'early_leave').length
+    const punctuality = present.length > 0 ? 1 - (lateOrEarly / present.length) * 0.5 : 1
+    const withHours   = present.filter(r => r.working_hours !== null)
+    const avgHours    = withHours.length > 0
+      ? withHours.reduce((s, r) => s + (r.working_hours ?? 0), 0) / withHours.length
+      : 0
+    const hoursScore  = Math.min(1, avgHours / EXPECTED_DAILY_HOURS)
+    const score       = Math.round(attRate * punctuality * hoursScore * 100)
+    return { label: formatLabel(key, granularity), value: score }
+  })
+}
+
+// Maps WP subcategory → trade categories that typically staff it.
+const WP_TRADE_MAP: Partial<Record<string, string[]>> = {
+  'Structural':                  ['Structural', 'Civil Works', 'Excavation', 'Concrete', 'Carpentry'],
+  'Finishing':                   ['Finishing', 'Tiling', 'Painting'],
+  'Safety Health & Environment': ['Safety Officer', 'Site Supervisor'],
+  'M&E':                         ['M&E Works', 'Plumbing'],
+  'Plumbing':                    ['Plumbing'],
+  'Earthworks':                  ['Excavation', 'Civil Works'],
+  'Protection':                  ['Civil Works', 'Structural'],
+}
+
+export function getWPAttentionList(_projectId: string): WPAttentionItem[] {
+  const scores   = buildProductivityScores()
+  const activeWPs = MOCK_WORK_PACKAGES.filter(
+    wp => wp.status === 'on_going' || wp.status === 'in_review'
+  )
+
+  return activeWPs.flatMap(wp => {
+    const trades   = WP_TRADE_MAP[wp.subcategory ?? ''] ?? []
+    if (trades.length === 0) return []
+
+    const assigned = scores.filter(s => trades.includes(s.tradeCategory ?? ''))
+    if (assigned.length === 0) return []
+
+    const attn = assigned.filter(s => s.band === 'attention').length
+    if (attn === 0) return []
+
+    return [{
+      packageCode:    wp.package_code,
+      category:       wp.category,
+      subcategory:    wp.subcategory,
+      attentionCount: attn,
+      totalAssigned:  assigned.length,
+      pct:            Math.round((attn / assigned.length) * 100),
+    } satisfies WPAttentionItem]
+  }).sort((a, b) => b.pct - a.pct)
 }
