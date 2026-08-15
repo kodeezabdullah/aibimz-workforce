@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ComposedChart,
   Bar,
@@ -135,6 +135,16 @@ function TooltipShell({ label, children }: { label?: string; children: React.Rea
       {children}
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Client-only wrapper — prevents Recharts clip-path ID hydration mismatch
+// ---------------------------------------------------------------------------
+function ClientOnly({ children, height }: { children: React.ReactNode; height: number }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted) return <div style={{ height }} />
+  return <>{children}</>
 }
 
 // ---------------------------------------------------------------------------
@@ -456,23 +466,25 @@ export default function DashboardPage() {
             <div className="flex items-center gap-6">
               {/* Custom donut — theme color + light gray */}
               <div className="relative shrink-0">
-                <PieChart width={160} height={160}>
-                  <Pie
-                    data={donutData}
-                    cx={78}
-                    cy={78}
-                    innerRadius={54}
-                    outerRadius={76}
-                    startAngle={90}
-                    endAngle={-270}
-                    dataKey="value"
-                    stroke="none"
-                    isAnimationActive={true}
-                  >
-                    <Cell fill={C_MINT} />
-                    <Cell fill="#E8E3DA" />
-                  </Pie>
-                </PieChart>
+                <ClientOnly height={160}>
+                  <PieChart width={160} height={160}>
+                    <Pie
+                      data={donutData}
+                      cx={78}
+                      cy={78}
+                      innerRadius={54}
+                      outerRadius={76}
+                      startAngle={90}
+                      endAngle={-270}
+                      dataKey="value"
+                      stroke="none"
+                      isAnimationActive={true}
+                    >
+                      <Cell fill={C_MINT} />
+                      <Cell fill="#E8E3DA" />
+                    </Pie>
+                  </PieChart>
+                </ClientOnly>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <span className="font-display text-2xl font-bold text-[var(--color-ink)] leading-none">
                     {todayAtt.rate}%
