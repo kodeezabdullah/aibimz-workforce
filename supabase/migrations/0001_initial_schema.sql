@@ -116,14 +116,19 @@ create table public.work_packages (
   work_nature       text,                  -- e.g. "Site Preliminary Work", "Work On Behalf"
   remark            text,
   budget_amount     numeric(15, 2),
+  actual_cost       numeric(15, 2),        -- populated on completion; null while in progress
   physical_progress numeric(5, 2) check (
                       physical_progress >= 0 and physical_progress <= 100
                     ),
   status            text not null default 'on_going' check (status in (
                       'on_going', 'in_review', 'completed', 'rejected_archived'
                     )),
+  location          text,                  -- optional site location (e.g. "Block A, Level 3")
   created_by        uuid,                  -- profiles.id (nullable until auth is live)
+  created_by_name   text,                  -- denormalised display name until auth is live
   assigned_to       uuid,                  -- profiles.id (nullable until auth is live)
+  assigned_to_name  text,                  -- denormalised display name until auth is live
+  rejection_reason  text,                  -- populated for rejected_archived status
   created_at        timestamptz not null default now()
 );
 

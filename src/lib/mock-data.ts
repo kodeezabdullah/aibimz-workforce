@@ -55,8 +55,13 @@ export interface WorkPackage {
   work_nature: string | null
   remark: string | null
   budget_amount: number | null
+  actual_cost: number | null       // populated on completion; null while in progress
   physical_progress: number | null
   status: WorkPackageStatus
+  location: string | null          // optional site location
+  created_by_name: string | null   // display name (until auth is live)
+  assigned_to_name: string | null  // display name (until auth is live)
+  rejection_reason: string | null  // for rejected_archived status
   created_at: string
 }
 
@@ -323,106 +328,186 @@ function makeAttendance(): AttendanceRecord[] {
 export const MOCK_ATTENDANCE: AttendanceRecord[] = makeAttendance()
 
 // ---------------------------------------------------------------------------
-// Work packages (unchanged)
+// Work packages
 // ---------------------------------------------------------------------------
 export const MOCK_WORK_PACKAGES: WorkPackage[] = [
-  {
-    id: 'wp-001', project_id: PROJECT_ID,
-    package_code: 'WP-BKT2SA-001',
-    category: 'Labour', subcategory: 'Protection', sub_subcategory: null,
-    work_nature: 'Site Preliminary Work', remark: 'Hoarding and fencing',
-    budget_amount: 85000, physical_progress: 100, status: 'completed',
-    created_at: '2024-10-20T08:00:00Z',
-  },
+  // ── On Going ──────────────────────────────────────────────────────────────
   {
     id: 'wp-002', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-002',
     category: 'Labour', subcategory: 'Safety Health & Environment', sub_subcategory: null,
-    work_nature: 'Work On Behalf', remark: 'Safety officer deployment',
-    budget_amount: 42000, physical_progress: 87, status: 'on_going',
+    work_nature: 'Work On Behalf', remark: 'Safety officer deployment and daily toolbox briefings',
+    budget_amount: 42000, actual_cost: null, physical_progress: 87, status: 'on_going',
+    location: null,
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Nurul Ain binti Malik',
+    rejection_reason: null,
     created_at: '2024-10-22T08:00:00Z',
   },
   {
     id: 'wp-003', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-003',
     category: 'Labour', subcategory: 'Structural', sub_subcategory: null,
-    work_nature: 'Reinforced Concrete Works', remark: 'Basement slab pours',
-    budget_amount: 310000, physical_progress: 62, status: 'on_going',
+    work_nature: 'Reinforced Concrete Works', remark: 'Basement slab pours — Levels B1 and B2',
+    budget_amount: 310000, actual_cost: null, physical_progress: 62, status: 'on_going',
+    location: 'Block B, Basement Level',
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Shahril bin Ramli',
+    rejection_reason: null,
     created_at: '2024-11-01T08:00:00Z',
-  },
-  {
-    id: 'wp-004', project_id: PROJECT_ID,
-    package_code: 'KSK/BKT2SA/004',
-    category: 'Labour', subcategory: 'Finishing', sub_subcategory: null,
-    work_nature: 'Plastering Works', remark: null,
-    budget_amount: 95000, physical_progress: 38, status: 'in_review',
-    created_at: '2024-11-10T08:00:00Z',
-  },
-  {
-    id: 'wp-005', project_id: PROJECT_ID,
-    package_code: 'KSK/BKT2SA/005',
-    category: 'Preliminary', subcategory: 'Earthworks', sub_subcategory: null,
-    work_nature: 'Excavation & Backfill', remark: 'Phase 1 excavation complete',
-    budget_amount: 220000, physical_progress: 100, status: 'completed',
-    created_at: '2024-10-15T08:00:00Z',
   },
   {
     id: 'wp-006', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-006',
     category: 'Labour', subcategory: 'M&E', sub_subcategory: 'Electrical',
     work_nature: 'Main Electrical Distribution', remark: null,
-    budget_amount: 175000, physical_progress: 45, status: 'on_going',
+    budget_amount: 175000, actual_cost: null, physical_progress: 45, status: 'on_going',
+    location: 'Block A, Electrical Riser',
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Nurul Ain binti Malik',
+    rejection_reason: null,
     created_at: '2024-11-15T08:00:00Z',
   },
   {
-    id: 'wp-007', project_id: PROJECT_ID,
-    package_code: 'WP-BKT2SA-007',
-    category: 'Preliminary', subcategory: 'Protection', sub_subcategory: null,
-    work_nature: 'Temporary Road Works', remark: 'Rejected — scope changed',
-    budget_amount: 38000, physical_progress: 15, status: 'rejected_archived',
-    created_at: '2024-11-05T08:00:00Z',
-  },
-  {
     id: 'wp-008', project_id: PROJECT_ID,
-    package_code: 'KSK/BKT2SA/008',
+    package_code: 'WP-BKT2SA-008',
     category: 'Labour', subcategory: 'Structural', sub_subcategory: null,
     work_nature: 'Formwork Installation', remark: null,
-    budget_amount: 140000, physical_progress: 71, status: 'on_going',
+    budget_amount: 140000, actual_cost: null, physical_progress: 71, status: 'on_going',
+    location: null,
+    created_by_name: 'Nurul Ain binti Malik', assigned_to_name: 'Shahril bin Ramli',
+    rejection_reason: null,
     created_at: '2024-11-20T08:00:00Z',
+  },
+  {
+    id: 'wp-011', project_id: PROJECT_ID,
+    package_code: 'WP-BKT2SA-011',
+    category: 'Labour', subcategory: 'Finishing', sub_subcategory: null,
+    work_nature: 'Tiling Works', remark: 'Wet areas and common corridors — early mobilisation',
+    budget_amount: 115000, actual_cost: null, physical_progress: 5, status: 'on_going',
+    location: 'Block B, Level 2',
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Nurul Ain binti Malik',
+    rejection_reason: null,
+    created_at: '2025-01-10T08:00:00Z',
+  },
+  // ── In Review ─────────────────────────────────────────────────────────────
+  {
+    id: 'wp-004', project_id: PROJECT_ID,
+    package_code: 'WP-BKT2SA-004',
+    category: 'Labour', subcategory: 'Finishing', sub_subcategory: null,
+    work_nature: 'Plastering Works', remark: null,
+    budget_amount: 95000, actual_cost: null, physical_progress: 38, status: 'in_review',
+    location: null,
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Shahril bin Ramli',
+    rejection_reason: null,
+    created_at: '2024-11-10T08:00:00Z',
   },
   {
     id: 'wp-009', project_id: PROJECT_ID,
     package_code: 'WP-BKT2SA-009',
     category: 'Labour', subcategory: 'Plumbing', sub_subcategory: null,
     work_nature: 'Internal Plumbing Rough-in', remark: null,
-    budget_amount: 88000, physical_progress: 28, status: 'in_review',
+    budget_amount: 88000, actual_cost: null, physical_progress: 28, status: 'in_review',
+    location: 'Block A, B, C (All Levels)',
+    created_by_name: 'Nurul Ain binti Malik', assigned_to_name: 'Shahril bin Ramli',
+    rejection_reason: null,
     created_at: '2024-12-01T08:00:00Z',
+  },
+  {
+    id: 'wp-015', project_id: PROJECT_ID,
+    package_code: 'WP-BKT2SA-015',
+    category: 'Labour', subcategory: 'Finishing', sub_subcategory: null,
+    work_nature: 'Painting Works', remark: 'Internal and external — awaiting QA sign-off',
+    budget_amount: 95000, actual_cost: null, physical_progress: 92, status: 'in_review',
+    location: null,
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Nurul Ain binti Malik',
+    rejection_reason: null,
+    created_at: '2025-02-14T08:00:00Z',
+  },
+  // ── Completed ─────────────────────────────────────────────────────────────
+  {
+    id: 'wp-001', project_id: PROJECT_ID,
+    package_code: 'KSK/BKT2SA/001',
+    category: 'Labour', subcategory: 'Protection', sub_subcategory: null,
+    work_nature: 'Site Preliminary Work', remark: 'Hoarding and fencing — full perimeter',
+    budget_amount: 85000, actual_cost: 62000, physical_progress: 100, status: 'completed',
+    location: 'Site Perimeter',
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Shahril bin Ramli',
+    rejection_reason: null,
+    created_at: '2024-10-20T08:00:00Z',
+  },
+  {
+    id: 'wp-005', project_id: PROJECT_ID,
+    package_code: 'KSK/BKT2SA/005',
+    category: 'Preliminary', subcategory: 'Earthworks', sub_subcategory: null,
+    work_nature: 'Excavation & Backfill', remark: 'Phase 1 excavation complete; cut-to-fill balanced',
+    budget_amount: 220000, actual_cost: 219200, physical_progress: 100, status: 'completed',
+    location: 'Site Boundary',
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Shahril bin Ramli',
+    rejection_reason: null,
+    created_at: '2024-10-15T08:00:00Z',
   },
   {
     id: 'wp-010', project_id: PROJECT_ID,
     package_code: 'KSK/BKT2SA/010',
     category: 'Preliminary', subcategory: 'Safety Health & Environment', sub_subcategory: null,
-    work_nature: 'Site Hoarding Extension', remark: 'North perimeter extension',
-    budget_amount: 22000, physical_progress: 100, status: 'completed',
+    work_nature: 'Site Hoarding Extension', remark: 'North perimeter extension — done ahead of schedule',
+    budget_amount: 22000, actual_cost: 400, physical_progress: 100, status: 'completed',
+    location: 'North Perimeter',
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Nurul Ain binti Malik',
+    rejection_reason: null,
     created_at: '2024-11-25T08:00:00Z',
   },
   {
-    id: 'wp-011', project_id: PROJECT_ID,
-    package_code: 'WP-BKT2SA-011',
-    category: 'Labour', subcategory: 'Finishing', sub_subcategory: null,
-    work_nature: 'Tiling Works', remark: null,
-    budget_amount: 115000, physical_progress: 5, status: 'on_going',
-    created_at: '2025-01-10T08:00:00Z',
+    id: 'wp-013', project_id: PROJECT_ID,
+    package_code: 'KSK/BKT2SA/013',
+    category: 'Labour', subcategory: 'Structural', sub_subcategory: null,
+    work_nature: 'Reinforced Concrete Works', remark: 'Ground floor slab — 28-day cube test passed',
+    budget_amount: 180000, actual_cost: 162000, physical_progress: 100, status: 'completed',
+    location: 'Block C, Ground Floor',
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Shahril bin Ramli',
+    rejection_reason: null,
+    created_at: '2024-12-10T08:00:00Z',
+  },
+  {
+    id: 'wp-014', project_id: PROJECT_ID,
+    package_code: 'KSK/BKT2SA/014',
+    category: 'Preliminary', subcategory: 'Earthworks', sub_subcategory: null,
+    work_nature: 'Site Clearing', remark: 'Tree removal and vegetation clearance',
+    budget_amount: 55000, actual_cost: 24000, physical_progress: 100, status: 'completed',
+    location: null,
+    created_by_name: 'Nurul Ain binti Malik', assigned_to_name: 'Shahril bin Ramli',
+    rejection_reason: null,
+    created_at: '2024-10-08T08:00:00Z',
+  },
+  // ── Rejected / Archived ───────────────────────────────────────────────────
+  {
+    id: 'wp-007', project_id: PROJECT_ID,
+    package_code: 'WP-BKT2SA-007',
+    category: 'Preliminary', subcategory: 'Protection', sub_subcategory: null,
+    work_nature: 'Temporary Road Works', remark: 'Internal access road — stone base course',
+    budget_amount: 38000, actual_cost: null, physical_progress: 15, status: 'rejected_archived',
+    location: null,
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Nurul Ain binti Malik',
+    rejection_reason: 'Scope changed — temporary access road no longer required following site layout revision',
+    created_at: '2024-11-05T08:00:00Z',
   },
   {
     id: 'wp-012', project_id: PROJECT_ID,
     package_code: 'KSK/BKT2SA/012',
     category: 'Labour', subcategory: 'Structural', sub_subcategory: null,
-    work_nature: 'Steel Frame Erection', remark: 'Rejected — subcon withdrawn',
-    budget_amount: 290000, physical_progress: 0, status: 'rejected_archived',
+    work_nature: 'Steel Frame Erection', remark: null,
+    budget_amount: 290000, actual_cost: null, physical_progress: 0, status: 'rejected_archived',
+    location: null,
+    created_by_name: 'Kevin Tan Yong Sheng', assigned_to_name: 'Shahril bin Ramli',
+    rejection_reason: 'Subcontractor withdrew from project; scope reassigned to main contractor under revised contract',
     created_at: '2024-12-15T08:00:00Z',
   },
 ]
+
+// ---------------------------------------------------------------------------
+// Selector: Work packages
+// ---------------------------------------------------------------------------
+export function getWorkPackages(_projectId: string): WorkPackage[] {
+  return MOCK_WORK_PACKAGES
+}
 
 // ---------------------------------------------------------------------------
 // Helpers shared by selectors
