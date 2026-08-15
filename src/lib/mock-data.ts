@@ -227,7 +227,8 @@ function makeAttendance(): AttendanceRecord[] {
       : 0.83 + seededRand(dateStr + 'att') * 0.12 - mondayPenalty
 
     // Avg working hours this day: range 6.8–8.2
-    const dayHoursBase = 6.8 + seededRand(dateStr + 'hrs') * 1.4
+    // Day-level hours base: wider swing so daily averages vary visibly (6.0–9.5)
+    const dayHoursBase = 6.0 + seededRand(dateStr + 'hrs') * 3.5
 
     // OT probability — interpolate from monthly curve + daily noise
     const monthsFromFeb = (dateObj.getFullYear() - 2025) * 12 + dateObj.getMonth() - 1
@@ -267,11 +268,14 @@ function makeAttendance(): AttendanceRecord[] {
 
       const isAttending = status !== 'absent'
 
-      // Working hours: day base + small worker-level noise (±0.5h)
+      // Each worker has a stable personal tendency (±2h) seeded by their ID
+      const workerHrsProfile = (seededRand(worker.id + 'hrs-profile') - 0.5) * 4.0
+      // Plus a per-day individual noise (±1h)
       const working_hours = isAttending
-        ? Math.round((dayHoursBase + (rHrs - 0.5) * 1.0
-            - (status === 'late' ? 0.8 : 0)
-            - (status === 'early_leave' ? 1.2 : 0)) * 100) / 100
+        ? Math.max(3.0, Math.min(12.0, Math.round(
+            (dayHoursBase + workerHrsProfile + (rHrs - 0.5) * 2.0
+              - (status === 'late' ? 0.8 : 0)
+              - (status === 'early_leave' ? 1.2 : 0)) * 100) / 100))
         : null
 
       // Overtime: probability driven by monthly OT curve + daily noise
