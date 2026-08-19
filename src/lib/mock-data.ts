@@ -1683,3 +1683,386 @@ export function getWPAttentionList(_projectId: string): WPAttentionItem[] {
     } satisfies WPAttentionItem]
   }).sort((a, b) => b.pct - a.pct)
 }
+
+// ---------------------------------------------------------------------------
+// Backcharge amounts per work package (most at 0, a few with real values)
+// backcharge = costs recovered from subcontractor for corrective work
+// ---------------------------------------------------------------------------
+const WP_BACKCHARGE: Record<string, number> = {
+  'wp-001': 0,
+  'wp-002': 0,
+  'wp-003': 18500,   // RC works — subcon corrective rework recovered
+  'wp-004': 4800,    // Plastering — remedial work recovered
+  'wp-005': 0,
+  'wp-006': 0,
+  'wp-007': 0,
+  'wp-008': 7200,    // Formwork — reinstallation cost recovered
+  'wp-009': 0,
+  'wp-010': 0,
+  'wp-011': 0,
+  'wp-012': 0,
+  'wp-013': 9600,    // RC works (completed) — subcon corrective rework
+  'wp-014': 0,
+  'wp-015': 0,
+}
+
+// ---------------------------------------------------------------------------
+// Report type utilities
+// ---------------------------------------------------------------------------
+export type LabourCostReportType = 'overall' | WorkerType
+
+const REPORT_TYPE_LABELS: Record<LabourCostReportType, string> = {
+  overall:        'Overall',
+  general_worker: 'General Worker',
+  staff:          'Staff',
+  subcon:         'Subcon',
+  operator:       'Operator',
+  subcon_as_gw:   'Subcon As GW',
+}
+
+export function getReportTypeLabel(type: LabourCostReportType): string {
+  return REPORT_TYPE_LABELS[type]
+}
+
+// ---------------------------------------------------------------------------
+// Helper: compute attendance-based costs for a date range and worker type
+// ---------------------------------------------------------------------------
+function computeCosts(
+  type: LabourCostReportType,
+  dateStart: string,
+  dateEnd: string,
+): { regular: number; ot: number; total: number } {
+  const workerMap = new Map(MOCK_WORKERS.map(w => [w.id, w]))
+  let regular = 0, ot = 0
+
+  for (const rec of MOCK_ATTENDANCE) {
+    if (rec.date < dateStart || rec.date > dateEnd) continue
+    if (rec.status === 'absent' || !rec.working_hours) continue
+    const worker = workerMap.get(rec.worker_id)
+    if (!worker) continue
+    if (type !== 'overall' && worker.worker_type !== type) continue
+    regular += rec.working_hours  * HOURLY_RATES[worker.worker_type]
+    ot      += rec.overtime_hours * OT_RATES[worker.worker_type]
+  }
+
+  return {
+    regular: Math.round(regular),
+    ot:      Math.round(ot),
+    total:   Math.round(regular + ot),
+  }
+}
+
+const DATA_START = isoDate(new Date(REF_DATE.getTime() - (DAYS_OF_DATA - 1) * 86_400_000))
+const MONTH_NAMES_FULL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+// ---------------------------------------------------------------------------
+// Selector: Expenses Summary (KPI row)
+// ---------------------------------------------------------------------------
+export interface ExpensesSummary {
+  accumulatedExpenses: number
+  accumulatedBackcharge: number
+  yearStartExpenses: number
+  yearStartBackcharge: number
+  totalExpensesThisMonth: number
+  totalBackchargeThisMonth: number
+  expensesTrendPct: number
+  backchargeTrendPct: number
+  regularPct: number
+  otPct: number
+}
+
+// Fraction of total backcharge attributable to each worker type
+const BC_TYPE_SCALE: Record<LabourCostReportType, number> = {
+  overall:        1.00,
+  subcon:         0.55,
+  general_worker: 0.20,
+  subcon_as_gw:   0.15,
+  operator:       0.07,
+  staff:          0.03,
+}
+
+const TOTAL_BACKCHARGE = Object.values(WP_BACKCHARGE).reduce((s, v) => s + v, 0)
+
+export function getExpensesSummary(
+  _projectId: string,
+  type: LabourCostReportType,
+  month: number,
+  year: number,
+): ExpensesSummary {
+  const mm      = String(month).padStart(2, '0')
+  const lastDay = daysInMonth(year, month)
+  const monthStart = `${year}-${mm}-01`
+  const monthEnd   = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
+
+  const prevMonth = month === 1 ? 12 : month - 1
+  const prevYear  = month === 1 ? year - 1 : year
+  const pmm       = String(prevMonth).padStart(2, '0')
+  const pld       = daysInMonth(prevYear, prevMonth)
+  const prevStart = `${prevYear}-${pmm}-01`
+  const prevEnd   = `${prevYear}-${pmm}-${String(pld).padStart(2, '0')}`
+
+  const yearStart = `${year}-01-01`
+
+  const curr = computeCosts(type, monthStart, monthEnd)
+  const prev = computeCosts(type, prevStart, prevEnd)
+  const acc  = computeCosts(type, DATA_START, monthEnd)
+  const yrst = computeCosts(type, yearStart, monthEnd)
+
+  const bcScale = BC_TYPE_SCALE[type]
+  const accBackcharge = Math.round(TOTAL_BACKCHARGE * bcScale)
+  const yearStartBackcharge = Math.round(accBackcharge * 0.75)
+
+  // Monthly backcharge: a fraction of annual backcharge with seeded noise
+  const mthlyBcBase = Math.round(accBackcharge * 0.12)
+  const monthlyBackcharge     = Math.round(mthlyBcBase * (0.8 + seededRand(`bc-${type}-${month}-${year}`) * 0.4))
+  const prevMonthlyBackcharge = Math.round(mthlyBcBase * (0.8 + seededRand(`bc-${type}-${prevMonth}-${prevYear}`) * 0.4))
+
+  const expensesTrendPct  = prev.total > 0
+    ? Math.round(((curr.total - prev.total) / prev.total) * 1000) / 10
+    : 0
+  const backchargeTrendPct = prevMonthlyBackcharge > 0
+    ? Math.round(((monthlyBackcharge - prevMonthlyBackcharge) / prevMonthlyBackcharge) * 1000) / 10
+    : 0
+
+  const regularPct = curr.total > 0 ? Math.round((curr.regular / curr.total) * 100) : 75
+  const otPct      = 100 - regularPct
+
+  return {
+    accumulatedExpenses:       acc.total,
+    accumulatedBackcharge:     accBackcharge,
+    yearStartExpenses:         yrst.total,
+    yearStartBackcharge,
+    totalExpensesThisMonth:    curr.total,
+    totalBackchargeThisMonth:  monthlyBackcharge,
+    expensesTrendPct,
+    backchargeTrendPct,
+    regularPct,
+    otPct,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Selector: 3-Month Expenses (stacked bar chart)
+// ---------------------------------------------------------------------------
+export interface MonthExpensesPoint {
+  month: string
+  regularAmount: number
+  otAmount: number
+  total: number
+}
+
+export function getThreeMonthExpenses(
+  _projectId: string,
+  type: LabourCostReportType,
+  month: number,
+  year: number,
+): MonthExpensesPoint[] {
+  const result: MonthExpensesPoint[] = []
+  for (let i = 2; i >= 0; i--) {
+    let m = month - i
+    let y = year
+    while (m <= 0) { m += 12; y-- }
+    const mm = String(m).padStart(2, '0')
+    const ld = daysInMonth(y, m)
+    const costs = computeCosts(type, `${y}-${mm}-01`, `${y}-${mm}-${String(ld).padStart(2, '0')}`)
+    result.push({
+      month:         `${MONTH_NAMES_FULL[m - 1]} ${y}`,
+      regularAmount: costs.regular,
+      otAmount:      costs.ot,
+      total:         costs.total,
+    })
+  }
+  return result
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Top Sub Elements (donut chart)
+// ---------------------------------------------------------------------------
+export interface SubElementSummary {
+  category: string
+  amount: number
+  trendPct: number
+}
+
+// Approximate labour cost share per subcategory — derived from budget proportions
+const SUBCATEGORY_COST_SHARE: Record<string, number> = {
+  'Structural':                  0.32,
+  'Finishing':                   0.22,
+  'M&E':                         0.15,
+  'Safety Health & Environment': 0.12,
+  'Plumbing':                    0.10,
+  'Earthworks':                  0.06,
+  'Protection':                  0.03,
+}
+
+export function getTopSubElements(
+  _projectId: string,
+  type: LabourCostReportType,
+  month: number,
+  year: number,
+  limit = 5,
+): SubElementSummary[] {
+  const mm  = String(month).padStart(2, '0')
+  const ld  = daysInMonth(year, month)
+  const curr = computeCosts(type, `${year}-${mm}-01`, `${year}-${mm}-${String(ld).padStart(2, '0')}`)
+
+  const prevMonth = month === 1 ? 12 : month - 1
+  const prevYear  = month === 1 ? year - 1 : year
+  const pmm       = String(prevMonth).padStart(2, '0')
+  const pld       = daysInMonth(prevYear, prevMonth)
+  const prev      = computeCosts(type, `${prevYear}-${pmm}-01`, `${prevYear}-${pmm}-${String(pld).padStart(2, '0')}`)
+
+  return Object.entries(SUBCATEGORY_COST_SHARE)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, limit)
+    .map(([cat, share]) => {
+      const noise     = 0.8 + seededRand(`sub-${cat}-${type}-${month}-${year}`) * 0.4
+      const prevNoise = 0.8 + seededRand(`sub-${cat}-${type}-${prevMonth}-${prevYear}`) * 0.4
+      const amount     = Math.round(curr.total * share * noise)
+      const prevAmount = Math.round(prev.total * share * prevNoise)
+      const trendPct   = prevAmount > 0
+        ? Math.round(((amount - prevAmount) / prevAmount) * 1000) / 10
+        : 0
+      return { category: cat, amount, trendPct }
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Top Work Packages Expenses
+// ---------------------------------------------------------------------------
+export interface WPExpensesRow {
+  id: string
+  packageCode: string
+  category: string | null
+  subcategory: string | null
+  workNature: string | null
+  expensesMTD: number
+  backchargeMTD: number
+  budget: number
+  usagePct: number
+  health: 'healthy' | 'watch' | 'over_budget'
+}
+
+export function getTopWorkPackagesExpenses(
+  _projectId: string,
+  type: LabourCostReportType,
+  month: number,
+  year: number,
+): WPExpensesRow[] {
+  const mm = String(month).padStart(2, '0')
+  const ld = daysInMonth(year, month)
+  const curr = computeCosts(type, `${year}-${mm}-01`, `${year}-${mm}-${String(ld).padStart(2, '0')}`)
+  const acc  = computeCosts(type, DATA_START, `${year}-${mm}-${String(ld).padStart(2, '0')}`)
+
+  const activeWPs = MOCK_WORK_PACKAGES.filter(wp => wp.status !== 'rejected_archived')
+
+  return activeWPs.map(wp => {
+    const share   = SUBCATEGORY_COST_SHARE[wp.subcategory ?? ''] ?? 0.05
+    const wpCount = MOCK_WORK_PACKAGES.filter(
+      w => w.subcategory === wp.subcategory && w.status !== 'rejected_archived'
+    ).length
+    const splitShare = share / Math.max(wpCount, 1)
+
+    const mNoise   = 0.7 + seededRand(`wp-exp-${wp.id}-${month}-${year}`) * 0.6
+    const accNoise = 0.8 + seededRand(`wp-acc-${wp.id}-${type}`) * 0.4
+
+    const expensesMTD = Math.round(curr.total * splitShare * mNoise)
+    const accExpenses = Math.round(acc.total  * splitShare * accNoise)
+
+    const budget   = wp.budget_amount ?? 0
+    const usagePct = budget > 0 ? Math.round((accExpenses / budget) * 100) : 0
+    const health: WPExpensesRow['health'] =
+      usagePct > 100 ? 'over_budget' : usagePct >= 80 ? 'watch' : 'healthy'
+
+    const bcScale       = BC_TYPE_SCALE[type]
+    const backchargeMTD = Math.round((WP_BACKCHARGE[wp.id] ?? 0) * bcScale * 0.1)
+
+    return {
+      id: wp.id,
+      packageCode: wp.package_code,
+      category:    wp.category,
+      subcategory: wp.subcategory,
+      workNature:  wp.work_nature,
+      expensesMTD,
+      backchargeMTD,
+      budget,
+      usagePct,
+      health,
+    } satisfies WPExpensesRow
+  }).sort((a, b) => b.expensesMTD - a.expensesMTD)
+}
+
+// ---------------------------------------------------------------------------
+// Selector: Sub Element Breakdown (table)
+// ---------------------------------------------------------------------------
+export interface SubElementRow {
+  subElement: string
+  expenses: number
+  backcharge: number
+  netExpenses: number
+  pctOfOverall: number
+  accExpenses: number
+}
+
+export interface SubElementBreakdown {
+  rows: SubElementRow[]
+  totalSubElement: number
+  extraPay: number
+  adjustment: number
+  netTotal: number
+  accBackcharge: number
+  accNetExpenses: number
+}
+
+export function getSubElementBreakdown(
+  _projectId: string,
+  type: LabourCostReportType,
+  month: number,
+  year: number,
+): SubElementBreakdown {
+  const mm  = String(month).padStart(2, '0')
+  const ld  = daysInMonth(year, month)
+  const monthEnd = `${year}-${mm}-${String(ld).padStart(2, '0')}`
+  const curr = computeCosts(type, `${year}-${mm}-01`, monthEnd)
+  const acc  = computeCosts(type, DATA_START, monthEnd)
+
+  const bcScale = BC_TYPE_SCALE[type]
+
+  const rows: SubElementRow[] = Object.entries(SUBCATEGORY_COST_SHARE).map(([cat, share]) => {
+    const noise     = 0.8 + seededRand(`bd-${cat}-${type}-${month}-${year}`) * 0.4
+    const accNoise  = 0.8 + seededRand(`bd-acc-${cat}-${type}`) * 0.4
+    const expenses  = Math.round(curr.total * share * noise)
+    const accExpenses = Math.round(acc.total * share * accNoise)
+
+    const backcharge = MOCK_WORK_PACKAGES
+      .filter(wp => wp.subcategory === cat)
+      .reduce((s, wp) => s + Math.round((WP_BACKCHARGE[wp.id] ?? 0) * bcScale), 0)
+
+    return {
+      subElement:   cat,
+      expenses,
+      backcharge,
+      netExpenses:  expenses - backcharge,
+      pctOfOverall: 0,    // computed below
+      accExpenses,
+    }
+  })
+
+  const totalExpenses = rows.reduce((s, r) => s + r.expenses, 0)
+  rows.forEach(r => {
+    r.pctOfOverall = totalExpenses > 0
+      ? Math.round((r.expenses / totalExpenses) * 1000) / 10
+      : 0
+  })
+
+  rows.sort((a, b) => b.expenses - a.expenses)
+
+  const totalSubElement = rows.reduce((s, r) => s + r.expenses, 0)
+  const extraPay   = Math.round(curr.total * 0.035 * (1 + seededRand(`extra-${type}-${month}-${year}`) * 0.3))
+  const adjustment = -Math.round(curr.total * 0.012 * (1 + seededRand(`adj-${type}-${month}-${year}`) * 0.5))
+  const netTotal   = totalSubElement + extraPay + adjustment
+  const accBackcharge  = rows.reduce((s, r) => s + r.backcharge, 0)
+  const accNetExpenses = acc.total - accBackcharge
+
+  return { rows, totalSubElement, extraPay, adjustment, netTotal, accBackcharge, accNetExpenses }
+}
